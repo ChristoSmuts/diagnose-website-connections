@@ -1,0 +1,99 @@
+import type {
+  Evidence,
+  Report,
+  ReportStatus,
+  ReportSummary,
+  Site,
+  SiteWithSummary,
+  Verdict,
+} from '@dwc/contracts';
+
+/**
+ * The storage contract.
+ *
+ * Feature code depends only on these interfaces, never on SQLite or Drizzle.
+ * That is what lets a Postgres adapter be added later without touching a single
+ * route, and what lets the tests run against an in-memory database.
+ *
+ * Every method takes a principalId. It is not optional and there is no
+ * "current user" hidden in module state — scoping has to be impossible to
+ * forget, because forgetting it once would leak another account's data.
+ */
+
+export interface CreateSiteInput {
+  principalId: string;
+  url: string;
+  label: string;
+  tags: string[];
+}
+
+/**
+ * Explicit `| undefined` on each field: under `exactOptionalPropertyTypes` an
+ * optional property and one that may hold `undefined` are different types, and
+ * zod's parsed output is the latter.
+ */
+export interface UpdateSiteInput {
+  label?: string | undefined;
+  tags?: string[] | undefined;
+  notes?: string | null | undefined;
+}
+
+export interface SiteRepository {
+  create(input: CreateSiteInput): Site;
+  findById(principalId: string, id: string): Site | null;
+  findByUrl(principalId: string, url: string): Site | null;
+  list(principalId: string, include: 'active' | 'archived' | 'all'): SiteWithSummary[];
+  update(principalId: string, id: string, input: UpdateSiteInput): Site | null;
+  /** Soft delete — reversible via restore. */
+  archive(principalId: string, id: string): Site | null;
+  restore(principalId: string, id: string): Site | null;
+  /** Irreversible. Cascades to the site's reports. */
+  hardDelete(principalId: string, id: string): boolean;
+}
+
+export interface CreateReportInput {
+  principalId: string;
+  siteId: string;
+}
+
+export interface ReportRepository {
+  /** Inserts a 'running' row so the UI has something to attach progress to. */
+  create(input: CreateReportInput): Report;
+  /**
+   * Records the outcome. This is the ONLY permitted mutation of a report, and
+   * only from 'running' — reports are otherwise immutable so that history
+   * cannot be rewritten.
+   */
+  complete(id: string, evidence: Evidence, verdict: Verdict): Report | null;
+  fail(id: string, error: string): Report | null;
+  findById(principalId: string, id: string): Report | null;
+  listForSite(
+    principalId: string,
+    siteId: string,
+    include: 'active' | 'archived' | 'all',
+  ): ReportSummary[];
+  archive(principalId: string, id: string): boolean;
+  restore(principalId: string, id: string): boolean;
+  hardDelete(principalId: string, id: string): boolean;
+}
+
+export interface Repositories {
+  sites: SiteRepository;
+  reports: ReportRepository;
+  close(): void;
+}
+
+/** Thrown when a write would violate the append-only rule. */
+export class ImmutableReportError extends Error {
+  constructor(id: string, status: ReportStatus) {
+    super(`Report ${id} is already ${status} and cannot be modified.`);
+    this.name = 'ImmutableReportError';
+  }
+}
+
+export class DuplicateSiteError extends Error {
+  constructor(url: string) {
+    super(`${url} is already saved.`);
+    this.name = 'DuplicateSiteError';
+  }
+}

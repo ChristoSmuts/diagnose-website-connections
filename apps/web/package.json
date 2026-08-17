@@ -1,0 +1,28 @@
+{
+  "name": "@dwc/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The diagnostics web app: run a check, read the report, manage saved sites.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@dwc/contracts": "workspace:*",
+    "@dwc/diagnostics": "workspace:*",
+    "@dwc/tokens": "workspace:*",
+    "@dwc/ui": "workspace:*",
+    "lit": "catalog:"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

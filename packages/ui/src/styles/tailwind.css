@@ -1,0 +1,72 @@
+@import 'tailwindcss' source(none);
+
+/*
+ * Only our own component sources are scanned. `source(none)` disables Tailwind's
+ * automatic detection, which would otherwise crawl the whole workspace and pull
+ * in classes from the app that this library has no business shipping.
+ */
+@source './../**/*.ts';
+
+/*
+ * Bridge Tailwind's theme to our tokens, so utilities like `text-ok` or
+ * `bg-surface` resolve to the same custom properties the hand-authored component
+ * CSS uses. Without this the two systems would drift apart and dark mode would
+ * only work in half the UI.
+ */
+@theme inline {
+  --color-surface: var(--dwc-surface);
+  --color-surface-raised: var(--dwc-surface-raised);
+  --color-surface-sunken: var(--dwc-surface-sunken);
+  --color-border-subtle: var(--dwc-border);
+  --color-border-strong: var(--dwc-border-strong);
+
+  --color-body: var(--dwc-text);
+  --color-muted: var(--dwc-text-muted);
+  --color-subtle: var(--dwc-text-subtle);
+
+  --color-brand: var(--dwc-brand);
+  --color-ok: var(--dwc-ok);
+  --color-warn: var(--dwc-warn);
+  --color-bad: var(--dwc-bad);
+  --color-unknown: var(--dwc-unknown);
+  --color-info: var(--dwc-info);
+
+  --font-sans: var(--dwc-font-sans);
+  --font-mono: var(--dwc-font-mono);
+
+  --radius-token: var(--dwc-radius);
+  --radius-token-lg: var(--dwc-radius-lg);
+}
+
+/*
+ * Shared base applied inside every shadow root.
+ *
+ * `:host` rules belong here rather than in each component: they are identical
+ * everywhere and this sheet is adopted once and shared by reference, so stating
+ * them here costs nothing per component.
+ */
+@layer base {
+  :host {
+    box-sizing: border-box;
+    font-family: var(--dwc-font-sans);
+    color: var(--dwc-text);
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: inherit;
+  }
+
+  /* Visible focus, always. Never traded away for aesthetics — it is the only
+     way a keyboard user knows where they are. */
+  :where(button, a, input, textarea, select, [tabindex]):focus-visible {
+    outline: none;
+    box-shadow: var(--dwc-focus-ring);
+    border-radius: var(--dwc-radius-sm);
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+}

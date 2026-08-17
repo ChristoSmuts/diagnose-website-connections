@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Connection Diagnostics — is it the site, or your internet?</title>
+    <meta
+      name="description"
+      content="Check any website and find out plainly whether a slowdown is the site's server, your own internet connection, or the network path between them."
+    />
+
+    <!--
+      Set the theme before first paint.
+
+      Without this the page renders light and then flips to dark, which is a
+      jarring flash for anyone using a dark theme. Inline and synchronous on
+      purpose — a deferred script would be too late.
+    -->
+    <script>
+      try {
+        var stored = localStorage.getItem('dwc-theme');
+        if (stored === 'dark' || stored === 'light') {
+          document.documentElement.setAttribute('data-theme', stored);
+        }
+      } catch (e) {
+        /* Private browsing can block storage; the media query still applies. */
+      }
+    </script>
+
+    <!-- Tells the browser to render native form controls and scrollbars to match. -->
+    <meta name="color-scheme" content="light dark" />
+  </head>
+  <body>
+    <dwc-app></dwc-app>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

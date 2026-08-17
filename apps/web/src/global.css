@@ -1,0 +1,62 @@
+/**
+ * Document-level styles.
+ *
+ * Deliberately minimal: everything inside a component lives in that component's
+ * shadow root. This file only handles the page itself, which no component owns.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Respect a user's OS-level font-size preference rather than forcing px. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  /* Explicit background: the page must not inherit a transparent ground, or a
+     dark-theme viewport shows through around the app. */
+  background: var(--dwc-surface);
+  color: var(--dwc-text);
+  font-family: var(--dwc-font-sans);
+  font-size: var(--dwc-text-base);
+  line-height: var(--dwc-leading-normal);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Smooth scrolling, but never for people who asked for less motion. */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Skip link: the first thing a keyboard user meets. Visually hidden until
+   focused, then clearly visible. */
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0.5rem 1rem;
+  background: var(--dwc-brand);
+  color: var(--dwc-text-inverse);
+  border-radius: 0 0 var(--dwc-radius) 0;
+  transform: translateY(-110%);
+  transition: transform 120ms ease;
+  z-index: 100;
+}
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+@media print {
+  body {
+    background: #fff;
+    color: #000;
+  }
+}

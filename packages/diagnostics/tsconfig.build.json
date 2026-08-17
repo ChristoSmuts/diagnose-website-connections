@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  // src/testing is deliberately included: the fixtures ship as a subpath export
+  // so the API and web packages can test against realistic evidence instead of
+  // maintaining their own divergent copies of these builders.
+  "exclude": ["src/**/*.test.ts"]
+}

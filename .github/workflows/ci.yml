@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Pinned to the same major as .nvmrc. Local and CI drifting apart is a
+          # common source of TLS and DNS differences in exactly this kind of app.
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Deployment is gated on all of these. Types and lint first because they
+      # fail fastest and their errors are the easiest to act on.
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Unit and integration tests
+        run: pnpm run test
+
+      - name: Build
+        run: pnpm run build
+
+      # The probe engine is useless if it cannot actually reach the internet, so
+      # CI runs a real diagnostic against a known-good host. It also catches
+      # environment-specific breakage that fixtures never would.
+      - name: Smoke test the probe engine against a live site
+        run: node apps/api/src/cli/probe.ts example.com --json > /tmp/probe.json
+        working-directory: .
+
+      - name: Assert the smoke test produced a usable verdict
+        run: |
+          node -e "
+            const r = require('/tmp/probe.json');
+            if (r.verdict.culprit === 'unreachable') throw new Error('probe could not reach the target');
+            if (typeof r.verdict.score !== 'number') throw new Error('no score produced');
+            console.log('verdict:', r.verdict.culprit, r.verdict.score + '/100');
+          "
+
+      - name: Verify the container builds
+        run: docker build -t dwc/diagnostics:ci .

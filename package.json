@@ -1,0 +1,24 @@
+{
+  "name": "diagnose-website-connections",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Diagnose a website's connection and attribute problems to the server, your internet connection, or the network path between them.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "verify": "turbo run typecheck lint test build"
+  },
+  "devDependencies": {
+    "turbo": "catalog:",
+    "typescript": "catalog:"
+  }
+}

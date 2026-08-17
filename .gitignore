@@ -1,0 +1,34 @@
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# Local diagnostic database + backups (self-hosted data lives here)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Generated Tailwind sheet for the shadow-DOM component library
+packages/ui/src/styles/generated.ts
+packages/ui/.tmp/

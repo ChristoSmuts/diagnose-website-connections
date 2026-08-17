@@ -1,0 +1,42 @@
+# Self-hosted connection diagnostics.
+#
+#   docker compose up --build
+#   → http://localhost:8787
+#
+# One service on purpose. The web app is served by the same process as the API,
+# which keeps the browser's latency measurements same-origin (a cross-origin
+# setup would add a CORS preflight to every latency sample and inflate the
+# baseline the whole diagnosis rests on).
+
+services:
+  diagnostics:
+    build: .
+    image: dwc/diagnostics:local
+    restart: unless-stopped
+    ports:
+      - '${PORT:-8787}:8787'
+    environment:
+      # No login by default: a self-hosted instance is inherently yours.
+      # Set AUTH_MODE=password with AUTH_PASSWORD before exposing it publicly.
+      AUTH_MODE: ${AUTH_MODE:-none}
+      AUTH_PASSWORD: ${AUTH_PASSWORD:-}
+
+      # Explicit resolvers, never the host's. A host running a local DNS proxy
+      # would otherwise make measurements depend on where the container runs.
+      DNS_RESOLVERS: ${DNS_RESOLVERS:-1.1.1.1,8.8.8.8,9.9.9.9}
+
+      # More samples give a more reliable median but take longer and send more
+      # traffic to the site being tested. Below 5, variance is treated as noise.
+      STABILITY_SAMPLES: ${STABILITY_SAMPLES:-5}
+
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-20}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_PATH: /app/data/dwc.db
+
+    volumes:
+      # Everything you own is one file in here. Back up = copy the directory.
+      - ./data:/app/data
+
+    # Defence in depth around a service that connects to user-supplied URLs.
+    security_opt:
+      - no-new-privileges:true

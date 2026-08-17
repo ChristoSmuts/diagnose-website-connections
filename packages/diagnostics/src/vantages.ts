@@ -1,0 +1,322 @@
+import type { ClientEvidence, Evidence, ServerEvidence, VantageHealth } from '@dwc/contracts';
+import {
+  LOCAL_CONTROL_RTT_MS,
+  MIN_SAMPLES_FOR_VARIANCE,
+  PATH_DEGRADATION,
+  THRESHOLDS,
+  classify,
+  classifyInverted,
+  type Band,
+  type Band3,
+} from './thresholds.js';
+import { instabilityRatio, lossRatio } from './stats.js';
+
+/** Worst wins — used to fold several independent signals into one status. */
+function worst(...values: readonly (Band3 | 'unknown')[]): Band3 | 'unknown' {
+  if (values.includes('bad')) return 'bad';
+  if (values.includes('degraded')) return 'degraded';
+  if (values.includes('ok')) return 'ok';
+  return 'unknown';
+}
+
+/**
+ * Penalty that scales with how far past a threshold a value actually sits.
+ *
+ * A flat per-band penalty would score a 700ms response and a 5000ms one
+ * identically, because both are merely "bad". That produced scores like 75/100
+ * alongside a critical finding, which reads as reassuring when it should not.
+ * Within the degraded band the penalty ramps linearly; past it, it climbs
+ * towards the full amount as the value approaches double the threshold.
+ */
+function graded(value: number | null, band: Band, degradedMax: number, badMax: number): number {
+  if (value === null || Number.isNaN(value)) return 0;
+  if (value <= band.ok) return 0;
+
+  if (value <= band.degraded) {
+    const span = band.degraded - band.ok;
+    const t = span > 0 ? (value - band.ok) / span : 1;
+    return degradedMax * t;
+  }
+
+  // Saturates at roughly four times the "degraded" threshold. Wide enough that
+  // 1.8s and 6s genuinely differ, bounded so the score cannot run away.
+  const excess = band.degraded > 0 ? (value - band.degraded) / (band.degraded * 3) : 1;
+  return degradedMax + (badMax - degradedMax) * Math.min(1, excess);
+}
+
+/** Same idea for metrics where a higher number is better (throughput). */
+function gradedInverted(value: number | null, band: Band, degradedMax: number, badMax: number): number {
+  if (value === null || Number.isNaN(value)) return 0;
+  if (value >= band.ok) return 0;
+
+  if (value >= band.degraded) {
+    const span = band.ok - band.degraded;
+    const t = span > 0 ? (band.ok - value) / span : 1;
+    return degradedMax * t;
+  }
+
+  const shortfall = band.degraded > 0 ? (band.degraded - value) / band.degraded : 1;
+  return degradedMax + (badMax - degradedMax) * Math.min(1, shortfall);
+}
+
+const clampScore = (n: number): number => Math.max(0, Math.min(100, Math.round(n)));
+
+/**
+ * Vantage S — the target's health as seen from a neutral, well-connected place.
+ *
+ * Because our server is not on the user's link, anything slow here is slow for
+ * everyone. That is what makes this vantage able to convict the site itself.
+ */
+export function assessServer(server: ServerEvidence): VantageHealth {
+  if (server.fatalError !== null) {
+    return {
+      status: 'bad',
+      label: 'Their server',
+      summary: 'We could not connect to this site at all.',
+      score: 0,
+    };
+  }
+
+  const reachable = server.addresses.some((a) => a.reachable);
+  if (server.addresses.length > 0 && !reachable) {
+    return {
+      status: 'bad',
+      label: 'Their server',
+      summary: 'The site has an address but refused every connection.',
+      score: 0,
+    };
+  }
+
+  const ttfb = classify(server.http?.ttfbMs.value ?? null, THRESHOLDS.ttfbMs);
+  const tcpValue = server.addresses.find((a) => a.reachable)?.tcpConnectMs.value ?? null;
+
+  const ratio = server.stability ? instabilityRatio(server.stability.ttfb) : null;
+
+  /**
+   * Variance only counts once there are enough samples to mean anything.
+   *
+   * An interquartile range computed from three requests is mostly noise — a
+   * single slow response makes a perfectly healthy site look erratic. Below the
+   * threshold it can still be raised as a low-confidence finding, but it must
+   * not drive the headline verdict.
+   */
+  const sampleCount = server.stability?.ttfb.count ?? 0;
+  const stability =
+    sampleCount >= MIN_SAMPLES_FOR_VARIANCE
+      ? classify(ratio, THRESHOLDS.instabilityRatio)
+      : ('unknown' as const);
+
+  const score = clampScore(
+    100 -
+      graded(server.http?.ttfbMs.value ?? null, THRESHOLDS.ttfbMs, 25, 60) -
+      graded(server.dns.lookupMs.value, THRESHOLDS.dnsMs, 8, 18) -
+      graded(tcpValue, THRESHOLDS.tcpMs, 8, 18) -
+      graded(server.tls?.handshakeMs.value ?? null, THRESHOLDS.tlsMs, 5, 12) -
+      graded(ratio, THRESHOLDS.instabilityRatio, 10, 25),
+  );
+
+  // TTFB and stability decide the status; DNS/TCP/TLS only shade the score.
+  // A site with slow DNS but a fast backend is not a "slow server", and saying
+  // so would send the owner chasing the wrong thing.
+  const status = worst(ttfb, stability);
+
+  return {
+    status: status === 'unknown' ? 'unknown' : status,
+    label: 'Their server',
+    summary: describeServer(status, server),
+    score,
+  };
+}
+
+function describeServer(status: Band3 | 'unknown', server: ServerEvidence): string {
+  const ttfb = server.http?.ttfbMs.value;
+  if (status === 'ok') {
+    return ttfb === null || ttfb === undefined
+      ? 'Responding normally.'
+      : `Responding quickly (${Math.round(ttfb)}ms to start sending the page).`;
+  }
+  if (status === 'unknown') return 'We could not measure this site’s response time.';
+
+  // A site can be degraded because it is slow OR because it is erratic, and
+  // those need different words. Reporting "slow to respond (63ms)" when the real
+  // problem is inconsistency is simply wrong, and invites the reader to dismiss
+  // the whole report.
+  const slow = classify(ttfb ?? null, THRESHOLDS.ttfbMs);
+  if (slow === 'ok') {
+    const stats = server.stability?.ttfb;
+    return stats === undefined
+      ? 'Responding inconsistently.'
+      : `Usually quick (${Math.round(stats.median ?? 0)}ms) but inconsistent — some requests took ${Math.round(stats.max ?? 0)}ms.`;
+  }
+
+  return status === 'bad'
+    ? `Very slow to respond (${Math.round(ttfb ?? 0)}ms before the first byte).`
+    : `Slower than it should be (${Math.round(ttfb ?? 0)}ms before it starts sending anything).`;
+}
+
+/**
+ * Vantage K — the user's own internet connection.
+ *
+ * Measured against *our* endpoint, deliberately: it is the only way to tell a
+ * bad link apart from a bad site. Returns `unknown` when the browser did not
+ * report, and the engine treats that as a hard block on blaming the user.
+ */
+export function assessUserConnection(client: ClientEvidence | null): VantageHealth {
+  if (client === null) {
+    return {
+      status: 'unknown',
+      label: 'Your connection',
+      summary: 'Not measured — run the test from a browser to include this.',
+      score: null,
+    };
+  }
+
+  /**
+   * A loopback control measures the machine, not the connection.
+   *
+   * When this tool is self-hosted on the same device as the browser — the default
+   * for local use — the control endpoint answers in 1–5ms over loopback. Reporting
+   * that as "your connection is healthy" would be actively misleading: a user on a
+   * failing link would be told their connection is perfect. We have not measured
+   * their internet at all, so we say so.
+   */
+  if (client.control.median !== null && client.control.median < LOCAL_CONTROL_RTT_MS) {
+    return {
+      status: 'unknown',
+      label: 'Your connection',
+      summary:
+        'Not measured — this tool is running on your own machine, so there is no network between you and it to test.',
+      score: null,
+    };
+  }
+
+  const rtt = classify(client.control.median, THRESHOLDS.clientRttMs);
+  const jitter = classify(client.control.jitter, THRESHOLDS.clientJitterMs);
+  const loss = classify(lossRatio(client.control), THRESHOLDS.clientLossRatio);
+  const throughput = client.throughput?.consented
+    ? classifyInverted(client.throughput.downloadBps.value, THRESHOLDS.throughputBps)
+    : 'unknown';
+
+  const lossValue = lossRatio(client.control);
+  const throughputValue = client.throughput?.consented
+    ? client.throughput.downloadBps.value
+    : null;
+
+  const score = clampScore(
+    100 -
+      graded(client.control.median, THRESHOLDS.clientRttMs, 18, 40) -
+      graded(client.control.jitter, THRESHOLDS.clientJitterMs, 10, 22) -
+      graded(lossValue, THRESHOLDS.clientLossRatio, 20, 45) -
+      gradedInverted(throughputValue, THRESHOLDS.throughputBps, 10, 22),
+  );
+
+  const status = worst(rtt, jitter, loss, throughput);
+
+  return {
+    status,
+    label: 'Your connection',
+    summary: describeClient(status, client),
+    score,
+  };
+}
+
+function describeClient(status: Band3 | 'unknown', client: ClientEvidence): string {
+  const rtt = client.control.median;
+  switch (status) {
+    case 'ok':
+      return rtt === null
+        ? 'Behaving normally.'
+        : `Healthy (${Math.round(rtt)}ms round trip, steady).`;
+    case 'degraded':
+      return `A little slow or unsteady (${Math.round(rtt ?? 0)}ms round trip).`;
+    case 'bad':
+      return `Slow or unreliable (${Math.round(rtt ?? 0)}ms round trip).`;
+    default:
+      return 'Not measured.';
+  }
+}
+
+/**
+ * Vantage "between" — the path from this user to this site.
+ *
+ * There is no direct instrument for this, so it is derived: given how long the
+ * user's own link takes and how long the server takes to respond, we know
+ * roughly what their combined experience *should* be. A large unexplained
+ * excess is the path itself — routing, peering, or a distant CDN edge.
+ *
+ * Always reported as inferred, never measured.
+ */
+export function assessNetworkPath(evidence: Evidence): VantageHealth & { excessMs: number | null } {
+  const { server, client } = evidence;
+
+  if (client === null) {
+    return {
+      status: 'unknown',
+      label: 'The path between',
+      summary: 'Not measured — needs a browser-side test.',
+      score: null,
+      excessMs: null,
+    };
+  }
+
+  const actual = client.target.median;
+  const userLatency = client.control.median;
+  const serverTime = server.http?.ttfbMs.value ?? null;
+
+  if (actual === null || userLatency === null || serverTime === null) {
+    return {
+      status: 'unknown',
+      label: 'The path between',
+      summary: 'Not enough data to judge the route.',
+      score: null,
+      excessMs: null,
+    };
+  }
+
+  // A loopback control gives us no idea what the user's internet actually costs,
+  // so there is nothing to subtract and no honest way to attribute the remainder.
+  if (userLatency < LOCAL_CONTROL_RTT_MS) {
+    return {
+      status: 'unknown',
+      label: 'The path between',
+      summary:
+        'Cannot be judged — this tool is running on your own machine, so there is no separate connection to compare against.',
+      score: null,
+      excessMs: null,
+    };
+  }
+
+  /**
+   * What the browser's request *should* cost.
+   *
+   * The browser pays for name lookup, connection and encryption on top of the
+   * server's own thinking time, whereas the server-side TTFB is measured on a
+   * connection that is already open. Comparing the two directly overstates the
+   * excess by the whole setup cost and manufactures a routing problem out of
+   * ordinary connection overhead.
+   */
+  const setupCost =
+    (server.dns.lookupMs.value ?? 0) +
+    (server.addresses.find((a) => a.reachable)?.tcpConnectMs.value ?? 0) +
+    (server.tls?.handshakeMs.value ?? 0);
+
+  const expected = userLatency + serverTime + setupCost;
+  const excess = actual - expected;
+  const overBy = expected > 0 ? actual / expected : 1;
+
+  const degraded = overBy >= PATH_DEGRADATION.ratio && excess >= PATH_DEGRADATION.absoluteFloorMs;
+  const bad = overBy >= PATH_DEGRADATION.ratio * 1.75 && excess >= PATH_DEGRADATION.absoluteFloorMs * 2;
+
+  const status: Band3 = bad ? 'bad' : degraded ? 'degraded' : 'ok';
+  const score = clampScore(bad ? 35 : degraded ? 65 : 95);
+
+  return {
+    status,
+    label: 'The path between',
+    summary: status === 'ok'
+      ? 'Traffic is taking a sensible route.'
+      : `Roughly ${Math.round(excess)}ms is being lost between you and the site, beyond what either end explains.`,
+    score,
+    excessMs: excess,
+  };
+}

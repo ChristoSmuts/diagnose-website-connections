@@ -1,0 +1,1962 @@
+{
+  "schemaVersion": "1.0.0",
+  "readme": "",
+  "modules": [
+    {
+      "kind": "javascript-module",
+      "path": "src/index.ts",
+      "declarations": [],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcBadge",
+          "declaration": {
+            "name": "DwcBadge",
+            "module": "./components/dwc-badge.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcButton",
+          "declaration": {
+            "name": "DwcButton",
+            "module": "./components/dwc-button.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "ButtonVariant",
+          "declaration": {
+            "name": "ButtonVariant",
+            "module": "./components/dwc-button.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcDialog",
+          "declaration": {
+            "name": "DwcDialog",
+            "module": "./components/dwc-dialog.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcFindingCard",
+          "declaration": {
+            "name": "DwcFindingCard",
+            "module": "./components/dwc-finding-card.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcIcon",
+          "declaration": {
+            "name": "DwcIcon",
+            "module": "./components/dwc-icon.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "IconName",
+          "declaration": {
+            "name": "IconName",
+            "module": "./components/dwc-icon.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcNavTree",
+          "declaration": {
+            "name": "DwcNavTree",
+            "module": "./components/dwc-nav-tree.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcProgressSteps",
+          "declaration": {
+            "name": "DwcProgressSteps",
+            "module": "./components/dwc-progress-steps.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "ProgressStep",
+          "declaration": {
+            "name": "ProgressStep",
+            "module": "./components/dwc-progress-steps.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcScoreDial",
+          "declaration": {
+            "name": "DwcScoreDial",
+            "module": "./components/dwc-score-dial.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcThemeToggle",
+          "declaration": {
+            "name": "DwcThemeToggle",
+            "module": "./components/dwc-theme-toggle.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcUrlInput",
+          "declaration": {
+            "name": "DwcUrlInput",
+            "module": "./components/dwc-url-input.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcVantageTile",
+          "declaration": {
+            "name": "DwcVantageTile",
+            "module": "./components/dwc-vantage-tile.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcVerdictBanner",
+          "declaration": {
+            "name": "DwcVerdictBanner",
+            "module": "./components/dwc-verdict-banner.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "DwcWaterfall",
+          "declaration": {
+            "name": "DwcWaterfall",
+            "module": "./components/dwc-waterfall.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "WaterfallPhase",
+          "declaration": {
+            "name": "WaterfallPhase",
+            "module": "./components/dwc-waterfall.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "sharedStyles",
+          "declaration": {
+            "name": "sharedStyles",
+            "module": "./styles/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "tailwindSheet",
+          "declaration": {
+            "name": "tailwindSheet",
+            "module": "./styles/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "baseSheet",
+          "declaration": {
+            "name": "baseSheet",
+            "module": "./styles/shared.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "formatWhen",
+          "declaration": {
+            "name": "formatWhen",
+            "module": "./utils/format.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "formatBytes",
+          "declaration": {
+            "name": "formatBytes",
+            "module": "./utils/format.js"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-badge.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A small status pill.\n\nAlways renders a text label alongside its colour. Colour is never the only\ncarrier of meaning here — that is a WCAG requirement, and it is also simply\nwhat makes a report readable to the roughly one in twelve men with a colour\nvision deficiency.",
+          "name": "DwcBadge",
+          "members": [
+            {
+              "kind": "field",
+              "name": "tone",
+              "type": {
+                "text": "StatusTone"
+              },
+              "default": "'unknown'",
+              "description": "Semantic colour. Paired with the label text, never used alone.",
+              "attribute": "tone",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "size",
+              "type": {
+                "text": "'sm' | 'lg'"
+              },
+              "default": "'sm'",
+              "attribute": "size",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "dot",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "description": "Show the leading dot. Purely decorative, so it is aria-hidden.",
+              "attribute": "dot"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "tone",
+              "type": {
+                "text": "StatusTone"
+              },
+              "default": "'unknown'",
+              "description": "Semantic colour. Paired with the label text, never used alone.",
+              "fieldName": "tone"
+            },
+            {
+              "name": "size",
+              "type": {
+                "text": "'sm' | 'lg'"
+              },
+              "default": "'sm'",
+              "fieldName": "size"
+            },
+            {
+              "name": "dot",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "description": "Show the leading dot. Purely decorative, so it is aria-hidden.",
+              "fieldName": "dot"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-badge",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcBadge",
+          "declaration": {
+            "name": "DwcBadge",
+            "module": "src/components/dwc-badge.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-badge",
+          "declaration": {
+            "name": "DwcBadge",
+            "module": "src/components/dwc-badge.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-button.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A button.\n\nRenders a real `<button>` inside the shadow root rather than styling a div, so\nkeyboard activation, form semantics and screen-reader announcement all come\nfor free instead of being reimplemented badly.",
+          "name": "DwcButton",
+          "members": [
+            {
+              "kind": "field",
+              "name": "variant",
+              "type": {
+                "text": "ButtonVariant"
+              },
+              "default": "'secondary'",
+              "attribute": "variant",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "size",
+              "type": {
+                "text": "'sm' | 'md' | 'lg'"
+              },
+              "default": "'md'",
+              "attribute": "size",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "disabled",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "attribute": "disabled",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "full",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "attribute": "full",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "loading",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "description": "Shows a spinner and blocks activation, without changing the button's width.",
+              "attribute": "loading"
+            },
+            {
+              "kind": "field",
+              "name": "type",
+              "type": {
+                "text": "'button' | 'submit'"
+              },
+              "default": "'button'",
+              "attribute": "type"
+            },
+            {
+              "kind": "field",
+              "name": "ariaLabelText",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "description": "Required when the button's only content is an icon.",
+              "attribute": "aria-label"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "variant",
+              "type": {
+                "text": "ButtonVariant"
+              },
+              "default": "'secondary'",
+              "fieldName": "variant"
+            },
+            {
+              "name": "size",
+              "type": {
+                "text": "'sm' | 'md' | 'lg'"
+              },
+              "default": "'md'",
+              "fieldName": "size"
+            },
+            {
+              "name": "disabled",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "fieldName": "disabled"
+            },
+            {
+              "name": "full",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "fieldName": "full"
+            },
+            {
+              "name": "loading",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "description": "Shows a spinner and blocks activation, without changing the button's width.",
+              "fieldName": "loading"
+            },
+            {
+              "name": "type",
+              "type": {
+                "text": "'button' | 'submit'"
+              },
+              "default": "'button'",
+              "fieldName": "type"
+            },
+            {
+              "name": "aria-label",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "description": "Required when the button's only content is an icon.",
+              "fieldName": "ariaLabelText"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-button",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcButton",
+          "declaration": {
+            "name": "DwcButton",
+            "module": "src/components/dwc-button.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-button",
+          "declaration": {
+            "name": "DwcButton",
+            "module": "src/components/dwc-button.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-dialog.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "Modal dialog, used for confirming anything irreversible.\n\nBuilt on the native `<dialog>` element rather than a hand-rolled overlay: it\ngives focus trapping, Escape-to-close, inert background content and the top\nlayer for free — all things that are routinely got wrong when reimplemented,\nand that a keyboard or screen-reader user depends on completely.",
+          "name": "DwcDialog",
+          "members": [
+            {
+              "kind": "field",
+              "name": "open",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "attribute": "open"
+            },
+            {
+              "kind": "field",
+              "name": "heading",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "attribute": "heading"
+            },
+            {
+              "kind": "field",
+              "name": "message",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "attribute": "message"
+            },
+            {
+              "kind": "field",
+              "name": "confirmLabel",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Confirm'",
+              "attribute": "confirm-label"
+            },
+            {
+              "kind": "field",
+              "name": "cancelLabel",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Cancel'",
+              "attribute": "cancel-label"
+            },
+            {
+              "kind": "field",
+              "name": "danger",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "description": "Styles the confirm action as destructive.",
+              "attribute": "danger"
+            },
+            {
+              "kind": "field",
+              "name": "dialog",
+              "type": {
+                "text": "HTMLDialogElement"
+              },
+              "privacy": "private"
+            },
+            {
+              "kind": "method",
+              "name": "close",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "reason",
+                  "type": {
+                    "text": "'cancel' | 'confirm'"
+                  }
+                }
+              ]
+            }
+          ],
+          "events": [
+            {
+              "name": "reason",
+              "type": {
+                "text": "CustomEvent"
+              }
+            }
+          ],
+          "attributes": [
+            {
+              "name": "open",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "fieldName": "open"
+            },
+            {
+              "name": "heading",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "fieldName": "heading"
+            },
+            {
+              "name": "message",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "fieldName": "message"
+            },
+            {
+              "name": "confirm-label",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Confirm'",
+              "fieldName": "confirmLabel"
+            },
+            {
+              "name": "cancel-label",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Cancel'",
+              "fieldName": "cancelLabel"
+            },
+            {
+              "name": "danger",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "description": "Styles the confirm action as destructive.",
+              "fieldName": "danger"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-dialog",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcDialog",
+          "declaration": {
+            "name": "DwcDialog",
+            "module": "src/components/dwc-dialog.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-dialog",
+          "declaration": {
+            "name": "DwcDialog",
+            "module": "src/components/dwc-dialog.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-finding-card.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "A single finding, written for three audiences at once.\n\nLayer 2 (title, plain, impact) is always visible and contains no unexplained\njargon. Layer 3 (evidence, technical detail, remediation) is behind a\ndisclosure, so an engineer can reach it in one click and everyone else is\nnever confronted with it.",
+          "name": "DwcFindingCard",
+          "members": [
+            {
+              "kind": "field",
+              "name": "finding",
+              "type": {
+                "text": "Finding"
+              },
+              "attribute": "finding"
+            },
+            {
+              "kind": "field",
+              "name": "expanded",
+              "type": {
+                "text": "boolean"
+              },
+              "privacy": "private",
+              "default": "false"
+            },
+            {
+              "kind": "field",
+              "name": "copied",
+              "type": {
+                "text": "boolean"
+              },
+              "privacy": "private",
+              "default": "false"
+            },
+            {
+              "kind": "method",
+              "name": "toggle",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              }
+            },
+            {
+              "kind": "method",
+              "name": "copySnippet",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "Promise<void>"
+                }
+              }
+            },
+            {
+              "kind": "method",
+              "name": "renderDetails",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "id",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ]
+            }
+          ],
+          "attributes": [
+            {
+              "name": "finding",
+              "type": {
+                "text": "Finding"
+              },
+              "fieldName": "finding"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-finding-card",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcFindingCard",
+          "declaration": {
+            "name": "DwcFindingCard",
+            "module": "src/components/dwc-finding-card.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-finding-card",
+          "declaration": {
+            "name": "DwcFindingCard",
+            "module": "src/components/dwc-finding-card.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-icon.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "",
+          "name": "DwcIcon",
+          "members": [
+            {
+              "kind": "field",
+              "name": "name",
+              "type": {
+                "text": "IconName"
+              },
+              "default": "'info'",
+              "attribute": "name"
+            },
+            {
+              "kind": "field",
+              "name": "label",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "description": "Supplying a label promotes the icon from decoration to content.",
+              "attribute": "label"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "name",
+              "type": {
+                "text": "IconName"
+              },
+              "default": "'info'",
+              "fieldName": "name"
+            },
+            {
+              "name": "label",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "description": "Supplying a label promotes the icon from decoration to content.",
+              "fieldName": "label"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-icon",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcIcon",
+          "declaration": {
+            "name": "DwcIcon",
+            "module": "src/components/dwc-icon.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-icon",
+          "declaration": {
+            "name": "DwcIcon",
+            "module": "src/components/dwc-icon.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-nav-tree.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "Sites, with their report history nested beneath.\n\nThe mental model is \"my sites, and what happened to them over time\", so sites\nare parents and reports are children rather than two flat lists. One component\nserves both the desktop sidebar and the mobile drawer — same information\narchitecture, different container, no divergent behaviour to keep in sync.",
+          "name": "DwcNavTree",
+          "members": [
+            {
+              "kind": "field",
+              "name": "sites",
+              "type": {
+                "text": "SiteWithSummary[]"
+              },
+              "default": "[]",
+              "attribute": "sites"
+            },
+            {
+              "kind": "field",
+              "name": "reportsBySite",
+              "type": {
+                "text": "Record<string, ReportSummary[]>"
+              },
+              "default": "{}",
+              "attribute": "reportsBySite"
+            },
+            {
+              "kind": "field",
+              "name": "selectedSite",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "attribute": "selected-site"
+            },
+            {
+              "kind": "field",
+              "name": "selectedReport",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "attribute": "selected-report"
+            },
+            {
+              "kind": "field",
+              "name": "expanded",
+              "privacy": "private",
+              "default": "new Set<string>()"
+            },
+            {
+              "kind": "method",
+              "name": "toggle",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "siteId",
+                  "type": {
+                    "text": "string"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "method",
+              "name": "emit",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "name",
+                  "type": {
+                    "text": "string"
+                  }
+                },
+                {
+                  "name": "detail",
+                  "type": {
+                    "text": "unknown"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "method",
+              "name": "renderSite",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "site",
+                  "type": {
+                    "text": "SiteWithSummary"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "method",
+              "name": "renderReport",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "report",
+                  "type": {
+                    "text": "ReportSummary"
+                  }
+                }
+              ]
+            }
+          ],
+          "events": [
+            {
+              "name": "name",
+              "type": {
+                "text": "CustomEvent"
+              }
+            }
+          ],
+          "attributes": [
+            {
+              "name": "sites",
+              "type": {
+                "text": "SiteWithSummary[]"
+              },
+              "default": "[]",
+              "fieldName": "sites"
+            },
+            {
+              "name": "reportsBySite",
+              "type": {
+                "text": "Record<string, ReportSummary[]>"
+              },
+              "default": "{}",
+              "fieldName": "reportsBySite"
+            },
+            {
+              "name": "selected-site",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "fieldName": "selectedSite"
+            },
+            {
+              "name": "selected-report",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "fieldName": "selectedReport"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-nav-tree",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcNavTree",
+          "declaration": {
+            "name": "DwcNavTree",
+            "module": "src/components/dwc-nav-tree.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-nav-tree",
+          "declaration": {
+            "name": "DwcNavTree",
+            "module": "src/components/dwc-nav-tree.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-progress-steps.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "Live progress while a diagnostic runs.\n\nA full probe legitimately takes several seconds, and watching real steps\ncomplete is far better than a spinner — it shows the tool is doing specific,\nlegible work rather than merely waiting.\n\nThe list is an aria-live region so the same information reaches screen-reader\nusers as it happens, rather than only appearing at the end.",
+          "name": "DwcProgressSteps",
+          "members": [
+            {
+              "kind": "field",
+              "name": "steps",
+              "type": {
+                "text": "ProgressStep[]"
+              },
+              "default": "[]",
+              "attribute": "steps"
+            },
+            {
+              "kind": "method",
+              "name": "renderMark",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult | typeof nothing"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "status",
+                  "type": {
+                    "text": "ProgressStep['status']"
+                  }
+                }
+              ]
+            }
+          ],
+          "attributes": [
+            {
+              "name": "steps",
+              "type": {
+                "text": "ProgressStep[]"
+              },
+              "default": "[]",
+              "fieldName": "steps"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-progress-steps",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcProgressSteps",
+          "declaration": {
+            "name": "DwcProgressSteps",
+            "module": "src/components/dwc-progress-steps.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-progress-steps",
+          "declaration": {
+            "name": "DwcProgressSteps",
+            "module": "src/components/dwc-progress-steps.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-score-dial.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "Circular 0–100 health score.\n\nThe number is rendered as real text in the centre, not as part of the SVG\nartwork, so it can be selected, zoomed and read by assistive technology. The\nring itself is `aria-hidden` and the whole component exposes a `meter` role\nwith the value — a screen reader hears \"72 out of 100\", not \"circle\".",
+          "name": "DwcScoreDial",
+          "members": [
+            {
+              "kind": "field",
+              "name": "score",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "attribute": "score"
+            },
+            {
+              "kind": "field",
+              "name": "size",
+              "type": {
+                "text": "'sm' | 'md' | 'lg'"
+              },
+              "default": "'md'",
+              "attribute": "size",
+              "reflects": true
+            },
+            {
+              "kind": "field",
+              "name": "caption",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Score'",
+              "attribute": "caption"
+            },
+            {
+              "kind": "field",
+              "name": "toneVar",
+              "type": {
+                "text": "string"
+              },
+              "privacy": "private",
+              "description": "Thresholds match the engine's own bands so the colour never contradicts the verdict.",
+              "readonly": true
+            }
+          ],
+          "attributes": [
+            {
+              "name": "score",
+              "type": {
+                "text": "number"
+              },
+              "default": "0",
+              "fieldName": "score"
+            },
+            {
+              "name": "size",
+              "type": {
+                "text": "'sm' | 'md' | 'lg'"
+              },
+              "default": "'md'",
+              "fieldName": "size"
+            },
+            {
+              "name": "caption",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Score'",
+              "fieldName": "caption"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-score-dial",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcScoreDial",
+          "declaration": {
+            "name": "DwcScoreDial",
+            "module": "src/components/dwc-score-dial.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-score-dial",
+          "declaration": {
+            "name": "DwcScoreDial",
+            "module": "src/components/dwc-score-dial.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-theme-toggle.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "Light / dark / follow-the-system.\n\nThree explicit states rather than a two-way switch, because \"follow my\nsystem\" is a real preference and a binary toggle silently overrides it the\nfirst time it is touched.\n\nImplemented as a radiogroup so arrow keys move between options, which is what\na keyboard user expects from a segmented control.",
+          "name": "DwcThemeToggle",
+          "members": [
+            {
+              "kind": "field",
+              "name": "choice",
+              "type": {
+                "text": "ThemeChoice"
+              },
+              "default": "'system'",
+              "attribute": "choice"
+            },
+            {
+              "kind": "method",
+              "name": "select",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "choice",
+                  "type": {
+                    "text": "ThemeChoice"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "method",
+              "name": "onKeydown",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "event",
+                  "type": {
+                    "text": "KeyboardEvent"
+                  }
+                }
+              ]
+            }
+          ],
+          "events": [
+            {
+              "name": "theme-change",
+              "type": {
+                "text": "CustomEvent"
+              }
+            }
+          ],
+          "attributes": [
+            {
+              "name": "choice",
+              "type": {
+                "text": "ThemeChoice"
+              },
+              "default": "'system'",
+              "fieldName": "choice"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-theme-toggle",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcThemeToggle",
+          "declaration": {
+            "name": "DwcThemeToggle",
+            "module": "src/components/dwc-theme-toggle.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-theme-toggle",
+          "declaration": {
+            "name": "DwcThemeToggle",
+            "module": "src/components/dwc-theme-toggle.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-url-input.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "The primary entry point: type an address, get a diagnostic.\n\nDeliberately forgiving — \"example.com\" is what people type, so the scheme is\noptional and whitespace is trimmed. Validation is left to the server, which\nowns the real rules (including the SSRF denylist); this only catches obviously\nempty input so the user is not told off for something the server would accept.",
+          "name": "DwcUrlInput",
+          "members": [
+            {
+              "kind": "field",
+              "name": "value",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "attribute": "value"
+            },
+            {
+              "kind": "field",
+              "name": "busy",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "attribute": "busy"
+            },
+            {
+              "kind": "field",
+              "name": "placeholder",
+              "type": {
+                "text": "string"
+              },
+              "default": "'example.com'",
+              "attribute": "placeholder"
+            },
+            {
+              "kind": "field",
+              "name": "buttonLabel",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Run diagnostic'",
+              "attribute": "button-label"
+            },
+            {
+              "kind": "field",
+              "name": "error",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "description": "Server-side error, surfaced next to the field it refers to.",
+              "attribute": "error"
+            },
+            {
+              "kind": "field",
+              "name": "localError",
+              "type": {
+                "text": "string | null"
+              },
+              "privacy": "private",
+              "default": "null"
+            },
+            {
+              "kind": "field",
+              "name": "input",
+              "type": {
+                "text": "HTMLInputElement"
+              },
+              "privacy": "private"
+            },
+            {
+              "kind": "method",
+              "name": "submit",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "event",
+                  "type": {
+                    "text": "Event"
+                  }
+                }
+              ]
+            }
+          ],
+          "events": [
+            {
+              "name": "diagnose",
+              "type": {
+                "text": "CustomEvent"
+              }
+            }
+          ],
+          "attributes": [
+            {
+              "name": "value",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "fieldName": "value"
+            },
+            {
+              "name": "busy",
+              "type": {
+                "text": "boolean"
+              },
+              "default": "false",
+              "fieldName": "busy"
+            },
+            {
+              "name": "placeholder",
+              "type": {
+                "text": "string"
+              },
+              "default": "'example.com'",
+              "fieldName": "placeholder"
+            },
+            {
+              "name": "button-label",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Run diagnostic'",
+              "fieldName": "buttonLabel"
+            },
+            {
+              "name": "error",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "description": "Server-side error, surfaced next to the field it refers to.",
+              "fieldName": "error"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-url-input",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcUrlInput",
+          "declaration": {
+            "name": "DwcUrlInput",
+            "module": "src/components/dwc-url-input.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-url-input",
+          "declaration": {
+            "name": "DwcUrlInput",
+            "module": "src/components/dwc-url-input.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-vantage-tile.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "",
+          "name": "DwcVantageTile",
+          "members": [
+            {
+              "kind": "field",
+              "name": "status",
+              "type": {
+                "text": "VantageStatus"
+              },
+              "default": "'unknown'",
+              "attribute": "status"
+            },
+            {
+              "kind": "field",
+              "name": "label",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "attribute": "label"
+            },
+            {
+              "kind": "field",
+              "name": "summary",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "attribute": "summary"
+            },
+            {
+              "kind": "field",
+              "name": "score",
+              "type": {
+                "text": "number | null"
+              },
+              "default": "null",
+              "attribute": "score"
+            },
+            {
+              "kind": "field",
+              "name": "icon",
+              "type": {
+                "text": "string"
+              },
+              "default": "'server'",
+              "attribute": "icon"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "status",
+              "type": {
+                "text": "VantageStatus"
+              },
+              "default": "'unknown'",
+              "fieldName": "status"
+            },
+            {
+              "name": "label",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "fieldName": "label"
+            },
+            {
+              "name": "summary",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "fieldName": "summary"
+            },
+            {
+              "name": "score",
+              "type": {
+                "text": "number | null"
+              },
+              "default": "null",
+              "fieldName": "score"
+            },
+            {
+              "name": "icon",
+              "type": {
+                "text": "string"
+              },
+              "default": "'server'",
+              "fieldName": "icon"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-vantage-tile",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcVantageTile",
+          "declaration": {
+            "name": "DwcVantageTile",
+            "module": "src/components/dwc-vantage-tile.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-vantage-tile",
+          "declaration": {
+            "name": "DwcVantageTile",
+            "module": "src/components/dwc-vantage-tile.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-verdict-banner.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "",
+          "name": "DwcVerdictBanner",
+          "members": [
+            {
+              "kind": "field",
+              "name": "culprit",
+              "type": {
+                "text": "Culprit"
+              },
+              "default": "'inconclusive'",
+              "attribute": "culprit"
+            },
+            {
+              "kind": "field",
+              "name": "headline",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "attribute": "headline"
+            },
+            {
+              "kind": "field",
+              "name": "plain",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "attribute": "plain"
+            },
+            {
+              "kind": "field",
+              "name": "confidence",
+              "type": {
+                "text": "'high' | 'medium' | 'low'"
+              },
+              "default": "'high'",
+              "attribute": "confidence"
+            },
+            {
+              "kind": "field",
+              "name": "confidenceReason",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "attribute": "confidence-reason"
+            }
+          ],
+          "attributes": [
+            {
+              "name": "culprit",
+              "type": {
+                "text": "Culprit"
+              },
+              "default": "'inconclusive'",
+              "fieldName": "culprit"
+            },
+            {
+              "name": "headline",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "fieldName": "headline"
+            },
+            {
+              "name": "plain",
+              "type": {
+                "text": "string"
+              },
+              "default": "''",
+              "fieldName": "plain"
+            },
+            {
+              "name": "confidence",
+              "type": {
+                "text": "'high' | 'medium' | 'low'"
+              },
+              "default": "'high'",
+              "fieldName": "confidence"
+            },
+            {
+              "name": "confidence-reason",
+              "type": {
+                "text": "string | null"
+              },
+              "default": "null",
+              "fieldName": "confidenceReason"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-verdict-banner",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcVerdictBanner",
+          "declaration": {
+            "name": "DwcVerdictBanner",
+            "module": "src/components/dwc-verdict-banner.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-verdict-banner",
+          "declaration": {
+            "name": "DwcVerdictBanner",
+            "module": "src/components/dwc-verdict-banner.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/components/dwc-waterfall.ts",
+      "declarations": [
+        {
+          "kind": "class",
+          "description": "Where the time actually went, phase by phase.\n\nBuilt from CSS-sized bars rather than SVG so it reflows naturally on a phone\nand inherits font metrics. Crucially it also renders a real `<table>` for\nassistive technology: a bar chart conveys nothing to a screen reader, and the\nnumbers here are the whole point of the section.",
+          "name": "DwcWaterfall",
+          "members": [
+            {
+              "kind": "field",
+              "name": "phases",
+              "type": {
+                "text": "WaterfallPhase[]"
+              },
+              "default": "[]",
+              "attribute": "phases"
+            },
+            {
+              "kind": "field",
+              "name": "caption",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Where the time went'",
+              "attribute": "caption"
+            },
+            {
+              "kind": "method",
+              "name": "renderPhase",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "phase",
+                  "type": {
+                    "text": "WaterfallPhase"
+                  }
+                },
+                {
+                  "name": "largest",
+                  "type": {
+                    "text": "number"
+                  }
+                }
+              ]
+            },
+            {
+              "kind": "method",
+              "name": "renderAccessibleTable",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "TemplateResult"
+                }
+              },
+              "parameters": [
+                {
+                  "name": "total",
+                  "type": {
+                    "text": "number"
+                  }
+                }
+              ],
+              "description": "The same data as a table, for screen readers.\n\nNot an afterthought: without this the entire section is invisible to anyone\nnot looking at it, and this chart carries the core evidence of the report."
+            }
+          ],
+          "attributes": [
+            {
+              "name": "phases",
+              "type": {
+                "text": "WaterfallPhase[]"
+              },
+              "default": "[]",
+              "fieldName": "phases"
+            },
+            {
+              "name": "caption",
+              "type": {
+                "text": "string"
+              },
+              "default": "'Where the time went'",
+              "fieldName": "caption"
+            }
+          ],
+          "superclass": {
+            "name": "LitElement",
+            "package": "lit"
+          },
+          "tagName": "dwc-waterfall",
+          "customElement": true
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "DwcWaterfall",
+          "declaration": {
+            "name": "DwcWaterfall",
+            "module": "src/components/dwc-waterfall.ts"
+          }
+        },
+        {
+          "kind": "custom-element-definition",
+          "name": "dwc-waterfall",
+          "declaration": {
+            "name": "DwcWaterfall",
+            "module": "src/components/dwc-waterfall.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/styles/generated.ts",
+      "declarations": [
+        {
+          "kind": "variable",
+          "name": "TAILWIND_CSS",
+          "default": "`/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */ @layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-border-style:solid;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial;--tw-backdrop-blur:initial;--tw-backdrop-brightness:initial;--tw-backdrop-contrast:initial;--tw-backdrop-grayscale:initial;--tw-backdrop-hue-rotate:initial;--tw-backdrop-invert:initial;--tw-backdrop-opacity:initial;--tw-backdrop-saturate:initial;--tw-backdrop-sepia:initial}}}@layer theme{:root,:host{--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:var(--dwc-font-sans);--default-mono-font-family:var(--dwc-font-mono)}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, \"Helvetica Neue\", \"Noto Sans\", Arial, sans-serif, \"Apple Color Emoji\", \"Segoe UI Emoji\", \"Segoe UI Symbol\", \"Noto Color Emoji\");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, \"Liberation Mono\", \"Courier New\", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring:where(:not(iframe)){outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}:host{box-sizing:border-box;font-family:var(--dwc-font-sans);color:var(--dwc-text)}*,:before,:after{box-sizing:inherit}:where(button,a,input,textarea,select,[tabindex]):focus-visible{box-shadow:var(--dwc-focus-ring);border-radius:var(--dwc-radius-sm);outline:none}[hidden]{display:none!important}}@layer components;@layer utilities{.\\\\@container{container-type:inline-size}.invisible{visibility:hidden}.visible{visibility:visible}.sr-only{clip-path:inset(50%);white-space:nowrap;border-width:0;width:1px;height:1px;margin:-1px;padding:0;position:absolute;overflow:hidden}.absolute{position:absolute}.relative{position:relative}.static{position:static}.container{width:100%}@media (min-width:40rem){.container{max-width:40rem}}@media (min-width:48rem){.container{max-width:48rem}}@media (min-width:64rem){.container{max-width:64rem}}@media (min-width:80rem){.container{max-width:80rem}}@media (min-width:96rem){.container{max-width:96rem}}.flex{display:flex}.grid{display:grid}.hidden{display:none}.table{display:table}.transform{transform:var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,)}.flex-wrap{flex-wrap:wrap}.border{border-style:var(--tw-border-style);border-width:1px}.text-wrap{text-wrap:wrap}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.ring{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.filter{filter:var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)}.backdrop-filter{-webkit-backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)}.transition{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to,opacity,box-shadow,transform,translate,scale,rotate,filter,-webkit-backdrop-filter,backdrop-filter,display,content-visibility,overlay,pointer-events;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}}@property --tw-rotate-x{syntax:\"*\";inherits:false}@property --tw-rotate-y{syntax:\"*\";inherits:false}@property --tw-rotate-z{syntax:\"*\";inherits:false}@property --tw-skew-x{syntax:\"*\";inherits:false}@property --tw-skew-y{syntax:\"*\";inherits:false}@property --tw-border-style{syntax:\"*\";inherits:false;initial-value:solid}@property --tw-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:\"*\";inherits:false}@property --tw-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:\"*\";inherits:false}@property --tw-inset-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:\"*\";inherits:false}@property --tw-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:\"*\";inherits:false}@property --tw-inset-ring-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:\"*\";inherits:false}@property --tw-ring-offset-width{syntax:\"<length>\";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:\"*\";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:\"*\";inherits:false;initial-value:0 0 #0000}@property --tw-blur{syntax:\"*\";inherits:false}@property --tw-brightness{syntax:\"*\";inherits:false}@property --tw-contrast{syntax:\"*\";inherits:false}@property --tw-grayscale{syntax:\"*\";inherits:false}@property --tw-hue-rotate{syntax:\"*\";inherits:false}@property --tw-invert{syntax:\"*\";inherits:false}@property --tw-opacity{syntax:\"*\";inherits:false}@property --tw-saturate{syntax:\"*\";inherits:false}@property --tw-sepia{syntax:\"*\";inherits:false}@property --tw-drop-shadow{syntax:\"*\";inherits:false}@property --tw-drop-shadow-color{syntax:\"*\";inherits:false}@property --tw-drop-shadow-alpha{syntax:\"<percentage>\";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:\"*\";inherits:false}@property --tw-backdrop-blur{syntax:\"*\";inherits:false}@property --tw-backdrop-brightness{syntax:\"*\";inherits:false}@property --tw-backdrop-contrast{syntax:\"*\";inherits:false}@property --tw-backdrop-grayscale{syntax:\"*\";inherits:false}@property --tw-backdrop-hue-rotate{syntax:\"*\";inherits:false}@property --tw-backdrop-invert{syntax:\"*\";inherits:false}@property --tw-backdrop-opacity{syntax:\"*\";inherits:false}@property --tw-backdrop-saturate{syntax:\"*\";inherits:false}@property --tw-backdrop-sepia{syntax:\"*\";inherits:false}`"
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "TAILWIND_CSS",
+          "declaration": {
+            "name": "TAILWIND_CSS",
+            "module": "src/styles/generated.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/styles/shared.ts",
+      "declarations": [
+        {
+          "kind": "variable",
+          "name": "tailwindSheet",
+          "type": {
+            "text": "CSSResult"
+          },
+          "description": "The one shared stylesheet every component adopts.\n\nCreated exactly once at module scope, deliberately. Lit turns each CSSResult\ninto a constructable CSSStyleSheet and adopts it by reference, so a single\ninstance means the browser parses this sheet once and shares it across every\nshadow root in the page — rather than every component paying for its own copy.\n\nExported as an array so components can write:\n  static styles = [...sharedStyles, css`…`]"
+        },
+        {
+          "kind": "variable",
+          "name": "baseSheet",
+          "default": "css` /* Screen-reader-only text. Used heavily: every chart in this library carries a text equivalent, because an SVG waterfall is meaningless to a screen reader. */ .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border-width: 0; } /* Every interactive element meets the minimum comfortable touch size, even when it looks smaller — mobile-first means this is not optional. */ .tap { min-width: var(--dwc-tap-target); min-height: var(--dwc-tap-target); } `",
+          "description": "Utilities that are awkward to express as Tailwind classes, or that we want\navailable to every component without repetition."
+        },
+        {
+          "kind": "variable",
+          "name": "sharedStyles",
+          "type": {
+            "text": "readonly CSSResult[]"
+          },
+          "default": "[tailwindSheet, baseSheet]"
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "tailwindSheet",
+          "declaration": {
+            "name": "tailwindSheet",
+            "module": "src/styles/shared.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "baseSheet",
+          "declaration": {
+            "name": "baseSheet",
+            "module": "src/styles/shared.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "sharedStyles",
+          "declaration": {
+            "name": "sharedStyles",
+            "module": "src/styles/shared.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/utils/format.ts",
+      "declarations": [
+        {
+          "kind": "function",
+          "name": "formatWhen",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "iso",
+              "type": {
+                "text": "string"
+              }
+            },
+            {
+              "name": "now",
+              "default": "new Date()",
+              "type": {
+                "text": "Date"
+              }
+            }
+          ],
+          "description": "Relative time for recent entries, absolute for older ones.\n\n\"3 min ago\" is what you want while comparing a re-run against the previous\nresult; a date is what you want a fortnight later."
+        },
+        {
+          "kind": "function",
+          "name": "formatBytes",
+          "return": {
+            "type": {
+              "text": "string"
+            }
+          },
+          "parameters": [
+            {
+              "name": "bytes",
+              "type": {
+                "text": "number"
+              }
+            }
+          ],
+          "description": "Human-readable byte sizes for evidence rows."
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "formatWhen",
+          "declaration": {
+            "name": "formatWhen",
+            "module": "src/utils/format.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "formatBytes",
+          "declaration": {
+            "name": "formatBytes",
+            "module": "src/utils/format.ts"
+          }
+        }
+      ]
+    }
+  ]
+}

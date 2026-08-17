@@ -1,0 +1,56 @@
+packages:
+  - apps/*
+  - packages/*
+  - e2e
+
+# better-sqlite3 ships a native addon. Prebuilt binaries exist for Node 24 on
+# Windows/Linux/macOS, so this resolves without a compiler toolchain.
+allowBuilds:
+  better-sqlite3: true
+  # Build-time only, pulled in by the Tailwind CLI. Never shipped at runtime,
+  # so these add no burden to a self-hosted deployment.
+  '@parcel/watcher': true
+  rs-module-lexer: true
+
+# Single source of truth for dependency versions across every workspace package.
+# Packages reference these as "catalog:" so versions can never drift apart.
+catalog:
+  # Language / build
+  typescript: ^7.0.2
+  vite: ^8.2.1
+  turbo: ^2.10.10
+
+  # UI
+  lit: ^3.3.3
+  tailwindcss: ^4.3.3
+  '@tailwindcss/vite': ^4.3.3
+  '@tailwindcss/cli': ^4.3.3
+
+  # Server
+  fastify: ^5.12.0
+  '@fastify/cors': ^11.1.0
+  '@fastify/helmet': ^13.1.0
+  '@fastify/rate-limit': ^11.2.0
+  '@fastify/static': ^10.1.3
+  pino: ^10.3.1
+  pino-pretty: ^13.1.3
+
+  # Data
+  drizzle-orm: ^0.45.2
+  drizzle-kit: ^0.31.10
+  better-sqlite3: ^13.0.3
+  '@types/better-sqlite3': ^9.6.0
+
+  # Validation
+  zod: ^4.4.3
+
+  # Test
+  vitest: ^4.1.10
+  '@vitest/browser': ^4.1.10
+  '@playwright/test': ^1.62.1
+  '@axe-core/playwright': ^4.13.0
+  axe-core: ^4.13.0
+
+  # Types — pinned to the 24.x line to match the Node 24 LTS runtime.
+  # Deliberately NOT "latest" (26.x), which would type against APIs the runtime lacks.
+  '@types/node': ^24.13.3

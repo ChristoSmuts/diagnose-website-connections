@@ -1,0 +1,25 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // No rootDir: nothing is emitted here (Vite builds), and vite.config.ts
+    // legitimately sits outside src.
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    // The app layer uses Lit's static `properties` API rather than decorators.
+    //
+    // Vite 8 transforms with Oxc, which cannot lower decorators of either
+    // flavour — standard or TypeScript-experimental — so decorated classes reach
+    // the browser verbatim and fail to parse. @dwc/ui is unaffected because tsc
+    // compiles it ahead of time; only app sources go through Oxc.
+    //
+    // useDefineForClassFields must be false here: with the static properties
+    // API, `define` semantics would shadow the accessors Lit installs on the
+    // prototype and reactivity would silently stop working.
+    "experimentalDecorators": false,
+    "useDefineForClassFields": false
+  },
+  "include": ["src/**/*.ts", "vite.config.ts"]
+}

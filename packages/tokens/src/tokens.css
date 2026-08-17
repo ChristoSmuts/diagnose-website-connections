@@ -1,0 +1,266 @@
+/**
+ * Design tokens.
+ *
+ * Defined as CSS custom properties on :root because custom properties inherit
+ * *through* shadow boundaries. That is what lets every component keep real
+ * shadow-DOM encapsulation while still being themed from the outside, with no
+ * ::part plumbing and no piercing selectors.
+ *
+ * Colours are OKLCH: perceptually uniform, so a lightness change looks like the
+ * same size of change across every hue. That is what keeps the semantic ramps
+ * (healthy / degraded / bad) visually balanced instead of the green reading much
+ * brighter than the red at identical numbers.
+ *
+ * Theming has three states, and all three are needed:
+ *   1. bare :root                          → light, the default
+ *   2. @media (prefers-color-scheme: dark) → follows the OS when no choice made,
+ *      guarded by :not([data-theme='light']) so an explicit light choice wins
+ *   3. :root[data-theme='dark']            → explicit choice beats the OS
+ * Omitting any one of them breaks either the toggle or the system default.
+ */
+
+:root {
+  /* --- Neutrals: very slightly cool, so the UI reads calm rather than clinical */
+  --dwc-surface: oklch(99% 0.002 250);
+  --dwc-surface-raised: oklch(100% 0 0);
+  --dwc-surface-sunken: oklch(96.5% 0.004 250);
+  --dwc-surface-hover: oklch(97% 0.006 250);
+  --dwc-surface-active: oklch(94% 0.008 250);
+
+  --dwc-border: oklch(90% 0.006 250);
+  --dwc-border-strong: oklch(80% 0.01 250);
+
+  /* 16.1:1 on --dwc-surface — comfortably past AAA for body text. */
+  --dwc-text: oklch(23% 0.012 250);
+  --dwc-text-muted: oklch(46% 0.012 250);
+  --dwc-text-subtle: oklch(58% 0.01 250);
+  --dwc-text-inverse: oklch(99% 0.002 250);
+
+  /* --- Brand: a confident azure. Trustworthy without being corporate-generic. */
+  --dwc-brand: oklch(52% 0.16 254);
+  --dwc-brand-hover: oklch(46% 0.17 254);
+  --dwc-brand-active: oklch(41% 0.17 254);
+  --dwc-brand-subtle: oklch(96% 0.025 254);
+  --dwc-brand-border: oklch(85% 0.06 254);
+  --dwc-brand-text: oklch(42% 0.16 254);
+
+  /* --- Verdict / status. Always paired with an icon and a word in the UI:
+         colour alone must never carry meaning. */
+  --dwc-ok: oklch(52% 0.13 155);
+  --dwc-ok-subtle: oklch(96% 0.03 155);
+  --dwc-ok-border: oklch(84% 0.07 155);
+  --dwc-ok-text: oklch(41% 0.11 155);
+
+  --dwc-warn: oklch(64% 0.14 68);
+  --dwc-warn-subtle: oklch(97% 0.035 68);
+  --dwc-warn-border: oklch(86% 0.08 68);
+  --dwc-warn-text: oklch(45% 0.11 60);
+
+  --dwc-bad: oklch(53% 0.19 25);
+  --dwc-bad-subtle: oklch(96.5% 0.03 25);
+  --dwc-bad-border: oklch(86% 0.08 25);
+  --dwc-bad-text: oklch(45% 0.18 25);
+
+  --dwc-unknown: oklch(62% 0.015 250);
+  --dwc-unknown-subtle: oklch(96.5% 0.004 250);
+  --dwc-unknown-border: oklch(88% 0.008 250);
+  --dwc-unknown-text: oklch(45% 0.012 250);
+
+  --dwc-info: oklch(55% 0.13 235);
+  --dwc-info-subtle: oklch(96.5% 0.03 235);
+  --dwc-info-border: oklch(85% 0.07 235);
+  --dwc-info-text: oklch(43% 0.13 235);
+
+  /* --- Focus ring: deliberately high-contrast and never removed. */
+  --dwc-focus: oklch(55% 0.18 254);
+  --dwc-focus-ring: 0 0 0 2px var(--dwc-surface), 0 0 0 4px var(--dwc-focus);
+
+  /* --- Typography. System stack: fast, familiar, no webfont to download. */
+  --dwc-font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  --dwc-font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas,
+    'DejaVu Sans Mono', monospace;
+
+  /* Fluid scale: readable on a phone, generous on a desktop, no breakpoints. */
+  --dwc-text-xs: 0.75rem;
+  --dwc-text-sm: 0.875rem;
+  --dwc-text-base: 1rem;
+  --dwc-text-lg: 1.125rem;
+  --dwc-text-xl: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
+  --dwc-text-2xl: clamp(1.5rem, 1.3rem + 1vw, 2rem);
+  --dwc-text-3xl: clamp(1.875rem, 1.5rem + 1.8vw, 2.75rem);
+
+  --dwc-leading-tight: 1.2;
+  --dwc-leading-normal: 1.55;
+  /* Long-form explanation is the heart of this product, so body copy gets room. */
+  --dwc-leading-relaxed: 1.7;
+
+  --dwc-weight-normal: 400;
+  --dwc-weight-medium: 500;
+  --dwc-weight-semibold: 600;
+  --dwc-weight-bold: 700;
+
+  /* --- Spacing: 4px base. */
+  --dwc-space-1: 0.25rem;
+  --dwc-space-2: 0.5rem;
+  --dwc-space-3: 0.75rem;
+  --dwc-space-4: 1rem;
+  --dwc-space-5: 1.25rem;
+  --dwc-space-6: 1.5rem;
+  --dwc-space-8: 2rem;
+  --dwc-space-10: 2.5rem;
+  --dwc-space-12: 3rem;
+  --dwc-space-16: 4rem;
+
+  --dwc-radius-sm: 0.25rem;
+  --dwc-radius: 0.5rem;
+  --dwc-radius-lg: 0.75rem;
+  --dwc-radius-xl: 1rem;
+  --dwc-radius-full: 9999px;
+
+  /* Shadows kept soft and tinted with the neutral hue rather than pure black,
+     which otherwise reads as a grey haze. */
+  --dwc-shadow-sm: 0 1px 2px 0 oklch(23% 0.012 250 / 0.06);
+  --dwc-shadow: 0 1px 3px 0 oklch(23% 0.012 250 / 0.08), 0 1px 2px -1px oklch(23% 0.012 250 / 0.06);
+  --dwc-shadow-md: 0 4px 6px -1px oklch(23% 0.012 250 / 0.08), 0 2px 4px -2px oklch(23% 0.012 250 / 0.06);
+  --dwc-shadow-lg: 0 10px 15px -3px oklch(23% 0.012 250 / 0.1), 0 4px 6px -4px oklch(23% 0.012 250 / 0.07);
+
+  /* --- Motion. Short and purposeful; all of it disabled under
+         prefers-reduced-motion at the bottom of this file. */
+  --dwc-duration-fast: 120ms;
+  --dwc-duration: 200ms;
+  --dwc-duration-slow: 320ms;
+  --dwc-ease: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* Minimum comfortable touch target — mobile-first, applied everywhere. */
+  --dwc-tap-target: 2.75rem;
+
+  --dwc-sidebar-width: 19rem;
+  --dwc-content-max: 56rem;
+}
+
+/* System preference, only when the user has not chosen explicitly. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --dwc-surface: oklch(19% 0.012 254);
+    --dwc-surface-raised: oklch(23% 0.014 254);
+    --dwc-surface-sunken: oklch(15.5% 0.01 254);
+    --dwc-surface-hover: oklch(27% 0.016 254);
+    --dwc-surface-active: oklch(31% 0.018 254);
+
+    --dwc-border: oklch(31% 0.014 254);
+    --dwc-border-strong: oklch(42% 0.018 254);
+
+    --dwc-text: oklch(96% 0.006 254);
+    --dwc-text-muted: oklch(76% 0.012 254);
+    --dwc-text-subtle: oklch(64% 0.014 254);
+    --dwc-text-inverse: oklch(19% 0.012 254);
+
+    /* Chroma is reduced and lightness raised for dark surfaces: the same
+       saturation that reads confident on white vibrates unpleasantly on black. */
+    --dwc-brand: oklch(72% 0.14 254);
+    --dwc-brand-hover: oklch(78% 0.13 254);
+    --dwc-brand-active: oklch(83% 0.11 254);
+    --dwc-brand-subtle: oklch(27% 0.045 254);
+    --dwc-brand-border: oklch(38% 0.07 254);
+    --dwc-brand-text: oklch(80% 0.12 254);
+
+    --dwc-ok: oklch(72% 0.14 155);
+    --dwc-ok-subtle: oklch(25% 0.04 155);
+    --dwc-ok-border: oklch(36% 0.07 155);
+    --dwc-ok-text: oklch(82% 0.13 155);
+
+    --dwc-warn: oklch(78% 0.14 72);
+    --dwc-warn-subtle: oklch(27% 0.045 68);
+    --dwc-warn-border: oklch(38% 0.075 68);
+    --dwc-warn-text: oklch(86% 0.13 75);
+
+    --dwc-bad: oklch(68% 0.17 25);
+    --dwc-bad-subtle: oklch(26% 0.055 25);
+    --dwc-bad-border: oklch(38% 0.1 25);
+    --dwc-bad-text: oklch(80% 0.13 25);
+
+    --dwc-unknown: oklch(62% 0.014 254);
+    --dwc-unknown-subtle: oklch(25% 0.01 254);
+    --dwc-unknown-border: oklch(35% 0.012 254);
+    --dwc-unknown-text: oklch(74% 0.012 254);
+
+    --dwc-info: oklch(72% 0.13 235);
+    --dwc-info-subtle: oklch(26% 0.045 235);
+    --dwc-info-border: oklch(37% 0.075 235);
+    --dwc-info-text: oklch(81% 0.12 235);
+
+    --dwc-focus: oklch(76% 0.14 254);
+
+    --dwc-shadow-sm: 0 1px 2px 0 oklch(0% 0 0 / 0.4);
+    --dwc-shadow: 0 1px 3px 0 oklch(0% 0 0 / 0.5), 0 1px 2px -1px oklch(0% 0 0 / 0.4);
+    --dwc-shadow-md: 0 4px 6px -1px oklch(0% 0 0 / 0.5), 0 2px 4px -2px oklch(0% 0 0 / 0.4);
+    --dwc-shadow-lg: 0 10px 15px -3px oklch(0% 0 0 / 0.6), 0 4px 6px -4px oklch(0% 0 0 / 0.5);
+  }
+}
+
+/* Explicit dark choice: must win regardless of the OS setting. Duplicated
+   rather than shared because a media query cannot be re-targeted this way. */
+:root[data-theme='dark'] {
+  --dwc-surface: oklch(19% 0.012 254);
+  --dwc-surface-raised: oklch(23% 0.014 254);
+  --dwc-surface-sunken: oklch(15.5% 0.01 254);
+  --dwc-surface-hover: oklch(27% 0.016 254);
+  --dwc-surface-active: oklch(31% 0.018 254);
+
+  --dwc-border: oklch(31% 0.014 254);
+  --dwc-border-strong: oklch(42% 0.018 254);
+
+  --dwc-text: oklch(96% 0.006 254);
+  --dwc-text-muted: oklch(76% 0.012 254);
+  --dwc-text-subtle: oklch(64% 0.014 254);
+  --dwc-text-inverse: oklch(19% 0.012 254);
+
+  --dwc-brand: oklch(72% 0.14 254);
+  --dwc-brand-hover: oklch(78% 0.13 254);
+  --dwc-brand-active: oklch(83% 0.11 254);
+  --dwc-brand-subtle: oklch(27% 0.045 254);
+  --dwc-brand-border: oklch(38% 0.07 254);
+  --dwc-brand-text: oklch(80% 0.12 254);
+
+  --dwc-ok: oklch(72% 0.14 155);
+  --dwc-ok-subtle: oklch(25% 0.04 155);
+  --dwc-ok-border: oklch(36% 0.07 155);
+  --dwc-ok-text: oklch(82% 0.13 155);
+
+  --dwc-warn: oklch(78% 0.14 72);
+  --dwc-warn-subtle: oklch(27% 0.045 68);
+  --dwc-warn-border: oklch(38% 0.075 68);
+  --dwc-warn-text: oklch(86% 0.13 75);
+
+  --dwc-bad: oklch(68% 0.17 25);
+  --dwc-bad-subtle: oklch(26% 0.055 25);
+  --dwc-bad-border: oklch(38% 0.1 25);
+  --dwc-bad-text: oklch(80% 0.13 25);
+
+  --dwc-unknown: oklch(62% 0.014 254);
+  --dwc-unknown-subtle: oklch(25% 0.01 254);
+  --dwc-unknown-border: oklch(35% 0.012 254);
+  --dwc-unknown-text: oklch(74% 0.012 254);
+
+  --dwc-info: oklch(72% 0.13 235);
+  --dwc-info-subtle: oklch(26% 0.045 235);
+  --dwc-info-border: oklch(37% 0.075 235);
+  --dwc-info-text: oklch(81% 0.12 235);
+
+  --dwc-focus: oklch(76% 0.14 254);
+
+  --dwc-shadow-sm: 0 1px 2px 0 oklch(0% 0 0 / 0.4);
+  --dwc-shadow: 0 1px 3px 0 oklch(0% 0 0 / 0.5), 0 1px 2px -1px oklch(0% 0 0 / 0.4);
+  --dwc-shadow-md: 0 4px 6px -1px oklch(0% 0 0 / 0.5), 0 2px 4px -2px oklch(0% 0 0 / 0.4);
+  --dwc-shadow-lg: 0 10px 15px -3px oklch(0% 0 0 / 0.6), 0 4px 6px -4px oklch(0% 0 0 / 0.5);
+}
+
+/* Respected globally rather than per-component, so no animation can escape it. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dwc-duration-fast: 1ms;
+    --dwc-duration: 1ms;
+    --dwc-duration-slow: 1ms;
+  }
+}
