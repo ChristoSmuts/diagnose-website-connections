@@ -60,7 +60,13 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
     transferredBytes = 45_000,
   } = opts;
 
-  const samples = ttfbSamples ?? [ttfbMs, ttfbMs * 1.05, ttfbMs * 0.95, ttfbMs * 1.02, ttfbMs * 0.98];
+  const samples = ttfbSamples ?? [
+    ttfbMs,
+    ttfbMs * 1.05,
+    ttfbMs * 0.95,
+    ttfbMs * 1.02,
+    ttfbMs * 0.98,
+  ];
 
   return {
     target: {
@@ -107,7 +113,8 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
         address: '93.184.216.34',
         family: 4,
         reachable: fatalError === null,
-        tcpConnectMs: fatalError === null ? measured(tcpMs, 'ms') : unavailable('ms', 'connection failed'),
+        tcpConnectMs:
+          fatalError === null ? measured(tcpMs, 'ms') : unavailable('ms', 'connection failed'),
         error: fatalError,
       },
       ...(ipv6Reachable === null
@@ -199,15 +206,19 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
 }
 
 export function makeClientEvidence(opts: ScenarioOptions = {}): ClientEvidence | null {
-  const { clientRttSamples, clientTargetSamples, clientFailed = 0, downloadBps = 12_000_000 } = opts;
+  const {
+    clientRttSamples,
+    clientTargetSamples,
+    clientFailed = 0,
+    downloadBps = 12_000_000,
+  } = opts;
 
   if (clientRttSamples === null) return null;
 
   const control = clientRttSamples ?? [30, 32, 29, 31, 30];
   // By default the browser's view of the target is consistent with the two
   // endpoints, so no phantom path problem appears unless a test asks for one.
-  const target =
-    clientTargetSamples ?? control.map((c) => c + (opts.ttfbMs ?? 90));
+  const target = clientTargetSamples ?? control.map((c) => c + (opts.ttfbMs ?? 90));
 
   return {
     observedAt: '2026-08-17T12:00:05.000Z',

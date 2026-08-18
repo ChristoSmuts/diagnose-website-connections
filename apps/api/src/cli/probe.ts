@@ -36,40 +36,63 @@ if (asJson) {
   process.exit(0);
 }
 
-const ms = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : `${String(Math.round(n))}ms`);
+const ms = (n: number | null | undefined): string =>
+  n === null || n === undefined ? '—' : `${String(Math.round(n))}ms`;
 
 console.log(`\n${'='.repeat(72)}`);
 console.log(`  ${verdict.headline}`);
 console.log(`${'='.repeat(72)}`);
-console.log(`\n  ${verdict.culprit.toUpperCase()}   score ${String(verdict.score)}/100   confidence ${verdict.confidence}`);
+console.log(
+  `\n  ${verdict.culprit.toUpperCase()}   score ${String(verdict.score)}/100   confidence ${verdict.confidence}`,
+);
 console.log(`\n  ${verdict.plain}\n`);
 
-for (const vantage of [verdict.vantages.server, verdict.vantages.userConnection, verdict.vantages.networkPath]) {
+for (const vantage of [
+  verdict.vantages.server,
+  verdict.vantages.userConnection,
+  verdict.vantages.networkPath,
+]) {
   console.log(`  [${vantage.status.padEnd(8)}] ${vantage.label.padEnd(18)} ${vantage.summary}`);
 }
 
 console.log('\n  MEASUREMENTS');
-console.log(`    DNS lookup     ${ms(evidence.dns.lookupMs.value)}  (${evidence.dns.consistent ? 'resolvers agree' : 'RESOLVERS DISAGREE'})`);
+console.log(
+  `    DNS lookup     ${ms(evidence.dns.lookupMs.value)}  (${evidence.dns.consistent ? 'resolvers agree' : 'RESOLVERS DISAGREE'})`,
+);
 for (const address of evidence.addresses) {
-  const state = address.reachable ? ms(address.tcpConnectMs.value) : `unreachable — ${address.error ?? 'no reason given'}`;
+  const state = address.reachable
+    ? ms(address.tcpConnectMs.value)
+    : `unreachable — ${address.error ?? 'no reason given'}`;
   console.log(`    TCP IPv${String(address.family)}       ${state}  ${address.address}`);
 }
 if (evidence.tls !== null) {
-  console.log(`    TLS handshake  ${ms(evidence.tls.handshakeMs.value)}  ${evidence.tls.protocol ?? '?'} / ${evidence.tls.cipher ?? '?'} / alpn=${evidence.tls.alpn ?? 'none'}`);
+  console.log(
+    `    TLS handshake  ${ms(evidence.tls.handshakeMs.value)}  ${evidence.tls.protocol ?? '?'} / ${evidence.tls.cipher ?? '?'} / alpn=${evidence.tls.alpn ?? 'none'}`,
+  );
   if (evidence.tls.certificate !== null) {
     const cert = evidence.tls.certificate;
-    console.log(`    Certificate    ${cert.issuer}, expires in ${String(Math.round(cert.daysUntilExpiry))} days, chain of ${String(cert.chainLength)}`);
+    console.log(
+      `    Certificate    ${cert.issuer}, expires in ${String(Math.round(cert.daysUntilExpiry))} days, chain of ${String(cert.chainLength)}`,
+    );
   }
 }
 if (evidence.http !== null) {
-  console.log(`    TTFB           ${ms(evidence.http.ttfbMs.value)}  HTTP/${evidence.http.httpVersion}, status ${String(evidence.http.status)}`);
-  console.log(`    Transferred    ${evidence.http.transferredBytes.value === null ? '—' : formatBytes(evidence.http.transferredBytes.value)}  encoding=${evidence.http.contentEncoding ?? 'none'}`);
+  console.log(
+    `    TTFB           ${ms(evidence.http.ttfbMs.value)}  HTTP/${evidence.http.httpVersion}, status ${String(evidence.http.status)}`,
+  );
+  console.log(
+    `    Transferred    ${evidence.http.transferredBytes.value === null ? '—' : formatBytes(evidence.http.transferredBytes.value)}  encoding=${evidence.http.contentEncoding ?? 'none'}`,
+  );
 }
 if (evidence.stability !== null) {
   const s = evidence.stability.ttfb;
-  console.log(`    Consistency    median ${ms(s.median)}  p95 ${ms(s.p95)}  jitter ${ms(s.jitter)}  (${String(s.count)} samples, ${String(s.failed)} failed)`);
+  console.log(
+    `    Consistency    median ${ms(s.median)}  p95 ${ms(s.p95)}  jitter ${ms(s.jitter)}  (${String(s.count)} samples, ${String(s.failed)} failed)`,
+  );
 }
-console.log(`    Hosted by      ${evidence.network.asnName ?? 'unknown'} ${evidence.network.asn ?? ''} ${evidence.network.cdnDetected !== null ? `— CDN: ${evidence.network.cdnDetected}` : ''}`);
+console.log(
+  `    Hosted by      ${evidence.network.asnName ?? 'unknown'} ${evidence.network.asn ?? ''} ${evidence.network.cdnDetected !== null ? `— CDN: ${evidence.network.cdnDetected}` : ''}`,
+);
 
 console.log(`\n  FINDINGS (${String(verdict.findings.length)})`);
 for (const finding of verdict.findings) {

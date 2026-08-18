@@ -1,4 +1,6 @@
 import type { ClientEvidence, Evidence, ServerEvidence, VantageHealth } from '@dwc/contracts';
+import { ms } from './findings/helpers.js';
+import { instabilityRatio, lossRatio } from './stats.js';
 import {
   LOCAL_CONTROL_RTT_MS,
   MIN_SAMPLES_FOR_VARIANCE,
@@ -9,7 +11,6 @@ import {
   type Band,
   type Band3,
 } from './thresholds.js';
-import { instabilityRatio, lossRatio } from './stats.js';
 
 /** Worst wins — used to fold several independent signals into one status. */
 function worst(...values: readonly (Band3 | 'unknown')[]): Band3 | 'unknown' {
@@ -45,7 +46,12 @@ function graded(value: number | null, band: Band, degradedMax: number, badMax: n
 }
 
 /** Same idea for metrics where a higher number is better (throughput). */
-function gradedInverted(value: number | null, band: Band, degradedMax: number, badMax: number): number {
+function gradedInverted(
+  value: number | null,
+  band: Band,
+  degradedMax: number,
+  badMax: number,
+): number {
   if (value === null || Number.isNaN(value)) return 0;
   if (value >= band.ok) return 0;
 
@@ -133,7 +139,7 @@ function describeServer(status: Band3 | 'unknown', server: ServerEvidence): stri
   if (status === 'ok') {
     return ttfb === null || ttfb === undefined
       ? 'Responding normally.'
-      : `Responding quickly (${Math.round(ttfb)}ms to start sending the page).`;
+      : `Responding quickly (${ms(ttfb)} to start sending the page).`;
   }
   if (status === 'unknown') return 'We could not measure this site’s response time.';
 
@@ -146,12 +152,12 @@ function describeServer(status: Band3 | 'unknown', server: ServerEvidence): stri
     const stats = server.stability?.ttfb;
     return stats === undefined
       ? 'Responding inconsistently.'
-      : `Usually quick (${Math.round(stats.median ?? 0)}ms) but inconsistent — some requests took ${Math.round(stats.max ?? 0)}ms.`;
+      : `Usually quick (${ms(stats.median ?? 0)}) but inconsistent — some requests took ${ms(stats.max ?? 0)}.`;
   }
 
   return status === 'bad'
-    ? `Very slow to respond (${Math.round(ttfb ?? 0)}ms before the first byte).`
-    : `Slower than it should be (${Math.round(ttfb ?? 0)}ms before it starts sending anything).`;
+    ? `Very slow to respond (${ms(ttfb ?? 0)} before the first byte).`
+    : `Slower than it should be (${ms(ttfb ?? 0)} before it starts sending anything).`;
 }
 
 /**
@@ -198,9 +204,7 @@ export function assessUserConnection(client: ClientEvidence | null): VantageHeal
     : 'unknown';
 
   const lossValue = lossRatio(client.control);
-  const throughputValue = client.throughput?.consented
-    ? client.throughput.downloadBps.value
-    : null;
+  const throughputValue = client.throughput?.consented ? client.throughput.downloadBps.value : null;
 
   const score = clampScore(
     100 -
@@ -224,13 +228,11 @@ function describeClient(status: Band3 | 'unknown', client: ClientEvidence): stri
   const rtt = client.control.median;
   switch (status) {
     case 'ok':
-      return rtt === null
-        ? 'Behaving normally.'
-        : `Healthy (${Math.round(rtt)}ms round trip, steady).`;
+      return rtt === null ? 'Behaving normally.' : `Healthy (${ms(rtt)} round trip, steady).`;
     case 'degraded':
-      return `A little slow or unsteady (${Math.round(rtt ?? 0)}ms round trip).`;
+      return `A little slow or unsteady (${ms(rtt ?? 0)} round trip).`;
     case 'bad':
-      return `Slow or unreliable (${Math.round(rtt ?? 0)}ms round trip).`;
+      return `Slow or unreliable (${ms(rtt ?? 0)} round trip).`;
     default:
       return 'Not measured.';
   }
@@ -305,7 +307,8 @@ export function assessNetworkPath(evidence: Evidence): VantageHealth & { excessM
   const overBy = expected > 0 ? actual / expected : 1;
 
   const degraded = overBy >= PATH_DEGRADATION.ratio && excess >= PATH_DEGRADATION.absoluteFloorMs;
-  const bad = overBy >= PATH_DEGRADATION.ratio * 1.75 && excess >= PATH_DEGRADATION.absoluteFloorMs * 2;
+  const bad =
+    overBy >= PATH_DEGRADATION.ratio * 1.75 && excess >= PATH_DEGRADATION.absoluteFloorMs * 2;
 
   const status: Band3 = bad ? 'bad' : degraded ? 'degraded' : 'ok';
   const score = clampScore(bad ? 35 : degraded ? 65 : 95);
@@ -313,9 +316,10 @@ export function assessNetworkPath(evidence: Evidence): VantageHealth & { excessM
   return {
     status,
     label: 'The path between',
-    summary: status === 'ok'
-      ? 'Traffic is taking a sensible route.'
-      : `Roughly ${Math.round(excess)}ms is being lost between you and the site, beyond what either end explains.`,
+    summary:
+      status === 'ok'
+        ? 'Traffic is taking a sensible route.'
+        : `Roughly ${ms(excess)} is being lost between you and the site, beyond what either end explains.`,
     score,
     excessMs: excess,
   };

@@ -24,9 +24,9 @@ describe('Metric provenance invariant', () => {
   });
 
   it('accepts an inferred value once a basis is given', () => {
-    expect(MetricSchema.safeParse(inferred(120, 'ms', 'derived from total minus TTFB')).success).toBe(
-      true,
-    );
+    expect(
+      MetricSchema.safeParse(inferred(120, 'ms', 'derived from total minus TTFB')).success,
+    ).toBe(true);
   });
 
   it('rejects an unavailable metric that smuggles in a placeholder number', () => {

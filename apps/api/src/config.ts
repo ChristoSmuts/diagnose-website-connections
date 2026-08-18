@@ -13,7 +13,10 @@ const num = (value: string | undefined, fallback: number): number => {
 const list = (value: string | undefined, fallback: readonly string[]): string[] =>
   value === undefined || value.trim() === ''
     ? [...fallback]
-    : value.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+    : value
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
 
 export interface Config {
   port: number;

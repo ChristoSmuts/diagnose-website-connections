@@ -9,7 +9,10 @@ import type { SampleStats, Unit } from '@dwc/contracts';
  * typical experience; the IQR describes how much it varies.
  */
 export function computeStats(samples: readonly number[], failed: number, unit: Unit): SampleStats {
-  const clean = samples.filter((n) => Number.isFinite(n)).slice().sort((a, b) => a - b);
+  const clean = samples
+    .filter((n) => Number.isFinite(n))
+    .slice()
+    .sort((a, b) => a - b);
 
   if (clean.length === 0) {
     return {

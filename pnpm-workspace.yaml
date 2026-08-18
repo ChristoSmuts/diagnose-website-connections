@@ -11,6 +11,8 @@ allowBuilds:
   # so these add no burden to a self-hosted deployment.
   '@parcel/watcher': true
   rs-module-lexer: true
+  # Native module resolver used by eslint-plugin-import-x. Lint-time only.
+  unrs-resolver: true
 
 # Single source of truth for dependency versions across every workspace package.
 # Packages reference these as "catalog:" so versions can never drift apart.

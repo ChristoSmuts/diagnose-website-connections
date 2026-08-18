@@ -2,8 +2,8 @@ import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import type { LookupFunction } from 'node:net';
 import type { HttpEvidence, RedirectHop, StabilityEvidence } from '@dwc/contracts';
-import { computeStats } from '@dwc/diagnostics';
 import { measured, unavailable } from '@dwc/contracts';
+import { computeStats } from '@dwc/diagnostics';
 import { resolveSafely } from '../safety/ssrf.ts';
 import { errorMessage, stopwatch } from './timing.ts';
 
@@ -28,7 +28,7 @@ export interface HttpProbeOptions {
  * development was a local proxy that refused queries outright.
  */
 function pinnedLookup(address: string, family: 4 | 6): LookupFunction {
-  return ((_hostname, options, callback) => {
+  return (_hostname, options, callback) => {
     // Node calls this with either (hostname, options, cb) or (hostname, cb).
     const done = typeof options === 'function' ? options : callback;
     if (typeof done !== 'function') return;
@@ -40,7 +40,7 @@ function pinnedLookup(address: string, family: 4 | 6): LookupFunction {
       return;
     }
     (done as (e: null, a: string, f: number) => void)(null, address, family);
-  }) as LookupFunction;
+  };
 }
 
 interface RawResponse {
@@ -265,7 +265,8 @@ export async function probeStability(
 
   return {
     ttfb: computeStats(timings, failed, 'ms'),
-    coldTtfbMs: cold === undefined ? unavailable('ms', 'no sample succeeded') : measured(cold, 'ms'),
+    coldTtfbMs:
+      cold === undefined ? unavailable('ms', 'no sample succeeded') : measured(cold, 'ms'),
     warmTtfbMs:
       warmMedian === undefined
         ? unavailable('ms', 'only one sample succeeded, so there is nothing to compare against')

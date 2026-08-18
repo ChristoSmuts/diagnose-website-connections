@@ -1,10 +1,10 @@
 import type { DiagnosticEvent, ProbePhase, ServerEvidence } from '@dwc/contracts';
 import type { Config } from '../config.ts';
 import { normalizeUrl, resolveSafely } from '../safety/ssrf.ts';
-import { probeDns } from './dns.ts';
-import { probeTcp, probeTls } from './connect.ts';
-import { probeHttp, probeStability } from './http.ts';
 import { probeAsn } from './asn.ts';
+import { probeTcp, probeTls } from './connect.ts';
+import { probeDns } from './dns.ts';
+import { probeHttp, probeStability } from './http.ts';
 import { errorMessage } from './timing.ts';
 
 export type PhaseReporter = (
@@ -110,12 +110,7 @@ export async function runServerProbe(
   // --- TLS ------------------------------------------------------------------
   if (target.scheme === 'https') {
     report('tls', 'started', 'Setting up the secure connection…');
-    base.tls = await probeTls(
-      reachable.address,
-      target.host,
-      target.port,
-      config.timeouts.tlsMs,
-    );
+    base.tls = await probeTls(reachable.address, target.host, target.port, config.timeouts.tlsMs);
     report(
       'tls',
       base.tls.error === null ? 'complete' : 'failed',

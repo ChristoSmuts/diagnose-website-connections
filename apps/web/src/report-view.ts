@@ -1,7 +1,24 @@
-import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
-import type { Evidence, Report, Verdict } from '@dwc/contracts';
+import type { Check, CheckPhase, Evidence, Report, Verdict } from '@dwc/contracts';
+import { CHECK_PHASE_ORDER } from '@dwc/contracts';
 import { sharedStyles, type WaterfallPhase } from '@dwc/ui';
+import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import '@dwc/ui';
+
+/**
+ * Phase headings, in the reader's terms rather than the protocol's.
+ *
+ * The engine groups checks by protocol stage; these are the words a reader can
+ * follow without already knowing the stack.
+ */
+const PHASE_LABELS: Record<CheckPhase, string> = {
+  dns: 'Finding the address',
+  connectivity: 'Reaching the server',
+  tls: 'Securing the connection',
+  http: 'Requesting the page',
+  stability: 'Consistency over several attempts',
+  network: 'Where the site is hosted',
+  client: 'Your own connection',
+};
 
 /**
  * The report itself — all three layers of progressive disclosure.
@@ -73,6 +90,25 @@ export class DwcReportView extends LitElement {
         gap: var(--dwc-space-3);
       }
 
+      .section-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--dwc-space-3);
+      }
+
+      .check-group {
+        display: grid;
+        gap: var(--dwc-space-2);
+        margin-top: var(--dwc-space-2);
+      }
+
+      .checks {
+        display: grid;
+        gap: var(--dwc-space-2);
+      }
+
       .panel {
         padding: var(--dwc-space-5);
         border: 1px solid var(--dwc-border);
@@ -139,12 +175,28 @@ export class DwcReportView extends LitElement {
   static override properties = {
     report: { type: Object },
     liveVerdict: { type: Object },
+    previousScore: { type: Number },
+    openChecks: { state: true },
+    problemsOnly: { state: true },
   };
 
   report!: Report;
 
   /** Revised verdict after browser evidence arrives; falls back to the stored one. */
   liveVerdict: Verdict | null = null;
+
+  /** The prior report's score for this site, so the dial can show movement. */
+  previousScore: number | null = null;
+
+  private openChecks = new Set<string>();
+
+  /**
+   * Collapsed by default, and filtered to problems first.
+   *
+   * A healthy site produces around thirty passing checks. Showing them all
+   * expanded would bury Layer 1, which is the part most readers should stop at.
+   */
+  private problemsOnly = false;
 
   private get verdict(): Verdict | null {
     return this.liveVerdict ?? this.report.verdict;
@@ -160,17 +212,22 @@ export class DwcReportView extends LitElement {
 
     return html`
       <div class="stack">
-        <div class="headline-row">
-          <dwc-verdict-banner
-            .culprit=${verdict.culprit}
-            .headline=${verdict.headline}
-            .plain=${verdict.plain}
-            .confidence=${verdict.confidence}
-            confidence-reason=${verdict.confidenceReason ?? ''}
-          ></dwc-verdict-banner>
-
-          <dwc-score-dial .score=${verdict.score} caption="Health"></dwc-score-dial>
-        </div>
+        <!-- The dial is slotted into the banner so the two read as one object,
+             and so the banner controls how they reflow together. -->
+        <dwc-verdict-banner
+          .culprit=${verdict.culprit}
+          .headline=${verdict.headline}
+          .plain=${verdict.plain}
+          .confidence=${verdict.confidence}
+          confidence-reason=${verdict.confidenceReason ?? ''}
+        >
+          <dwc-score-dial
+            slot="score"
+            .score=${verdict.score}
+            .previous=${this.previousScore}
+            caption="Health"
+          ></dwc-score-dial>
+        </dwc-verdict-banner>
 
         <div class="tiles">
           <dwc-vantage-tile
@@ -200,45 +257,50 @@ export class DwcReportView extends LitElement {
 
         <section>
           <h3>What we found</h3>
-          ${verdict.findings.length === 0
-            ? html`
-                <p class="all-clear">
-                  <dwc-icon name="check"></dwc-icon>
-                  We found nothing that needs fixing.
-                </p>
-              `
-            : html`
-                <p class="section-note">
-                  Listed worst first. Each one says who can actually fix it — open any of them for the
-                  technical detail and specific steps.
-                </p>
-                <div class="findings">
-                  ${verdict.findings.map(
-                    (finding) => html`<dwc-finding-card .finding=${finding}></dwc-finding-card>`,
-                  )}
-                </div>
-              `}
+          ${
+            verdict.findings.length === 0
+              ? html`
+                  <p class="all-clear">
+                    <dwc-icon name="check"></dwc-icon>
+                    We found nothing that needs fixing.
+                  </p>
+                `
+              : html`
+                  <p class="section-note">
+                    Listed worst first. Each one says who can actually fix it — open any of them for
+                    the technical detail and specific steps.
+                  </p>
+                  <div class="findings">
+                    ${verdict.findings.map(
+                      (finding) => html`<dwc-finding-card .finding=${finding}></dwc-finding-card>`,
+                    )}
+                  </div>
+                `
+          }
         </section>
 
-        ${verdict.glossary.length === 0
-          ? nothing
-          : html`
-              <section>
-                <h3>Jargon, explained</h3>
-                <div class="panel">
-                  <dl class="glossary">
-                    ${verdict.glossary.map(
-                      (entry) => html`
-                        <div>
-                          <dt>${entry.term}</dt>
-                          <dd>${entry.definition}</dd>
-                        </div>
-                      `,
-                    )}
-                  </dl>
-                </div>
-              </section>
-            `}
+        ${verdict.checks.length === 0 ? nothing : this.renderChecks(verdict.checks)}
+        ${
+          verdict.glossary.length === 0
+            ? nothing
+            : html`
+                <section>
+                  <h3>Jargon, explained</h3>
+                  <div class="panel">
+                    <dl class="glossary">
+                      ${verdict.glossary.map(
+                        (entry) => html`
+                          <div>
+                            <dt>${entry.term}</dt>
+                            <dd>${entry.definition}</dd>
+                          </div>
+                        `,
+                      )}
+                    </dl>
+                  </div>
+                </section>
+              `
+        }
 
         <div class="meta">
           <span>Checked ${new Date(this.report.createdAt).toLocaleString()}</span>
@@ -247,6 +309,105 @@ export class DwcReportView extends LitElement {
         </div>
       </div>
     `;
+  }
+
+  /**
+   * Every check performed, passes included — Layer 3 proper.
+   *
+   * This exists because findings only describe problems, which left a healthy site
+   * with nothing to inspect. Grouped by phase in the order a request actually
+   * happens, so reading down the list follows the request itself.
+   */
+  private renderChecks(checks: readonly Check[]): TemplateResult {
+    const counts = {
+      pass: checks.filter((c) => c.status === 'pass').length,
+      problems: checks.filter((c) => c.status === 'warn' || c.status === 'fail').length,
+      // "Not run" and "could not tell" are grouped for the summary line only;
+      // each row still states which of the two it was.
+      inconclusive: checks.filter((c) => c.status === 'skipped' || c.status === 'unavailable')
+        .length,
+    };
+
+    const visible = this.problemsOnly
+      ? checks.filter((c) => c.status === 'warn' || c.status === 'fail')
+      : checks;
+
+    const groups = CHECK_PHASE_ORDER.map((phase) => ({
+      phase,
+      label: PHASE_LABELS[phase],
+      items: visible.filter((c) => c.phase === phase),
+    })).filter((g) => g.items.length > 0);
+
+    return html`
+      <section>
+        <div class="section-head">
+          <h3>Every check we ran</h3>
+          <dwc-button
+            variant="ghost"
+            size="sm"
+            class="no-print"
+            @click=${this.toggleProblemsOnly}
+            aria-pressed=${this.problemsOnly ? 'true' : 'false'}
+          >
+            <dwc-icon name="filter"></dwc-icon>
+            ${this.problemsOnly ? 'Show all checks' : 'Only show problems'}
+          </dwc-button>
+        </div>
+
+        <p class="section-note">
+          ${String(counts.pass)} passed, ${String(counts.problems)} worth attention,
+          ${String(counts.inconclusive)} inconclusive. Open any of them for the full technical
+          detail and the evidence behind it.
+        </p>
+
+        ${
+          visible.length === 0
+            ? html`<p class="section-note">No problems were found in any check.</p>`
+            : groups.map(
+                (group) => html`
+                  <div class="check-group">
+                    <p class="eyebrow">${group.label}</p>
+                    <div class="checks">
+                      ${group.items.map(
+                        (check) => html`
+                          <dwc-check-row
+                            .check=${check}
+                            .open=${this.openChecks.has(check.id)}
+                            @toggle-check=${this.onToggleCheck}
+                          ></dwc-check-row>
+                        `,
+                      )}
+                    </div>
+                  </div>
+                `,
+              )
+        }
+      </section>
+    `;
+  }
+
+  private toggleProblemsOnly(): void {
+    this.problemsOnly = !this.problemsOnly;
+    this.requestUpdate();
+  }
+
+  /**
+   * Open state is held here rather than left inside each row.
+   *
+   * The filter re-renders the list, and Lit reuses DOM across that render; keeping
+   * the set in the parent means a check the reader opened stays open instead of
+   * silently collapsing when the filter is toggled.
+   */
+  private onToggleCheck(event: Event): void {
+    const detail = (event as CustomEvent<{ id: string | null; open: boolean }>).detail;
+    if (detail.id === null) return;
+
+    const next = new Set(this.openChecks);
+    if (detail.open) next.add(detail.id);
+    else next.delete(detail.id);
+
+    this.openChecks = next;
+    this.requestUpdate();
   }
 
   /**
@@ -281,7 +442,8 @@ export class DwcReportView extends LitElement {
       {
         label: 'Waiting for the server',
         durationMs: server.http?.ttfbMs.value ?? null,
-        description: 'The server thinking before it sends anything. This is its own doing, not the network.',
+        description:
+          'The server thinking before it sends anything. This is its own doing, not the network.',
         tone: 'warn',
       },
       {
@@ -296,8 +458,8 @@ export class DwcReportView extends LitElement {
       <section>
         <h3>Where the time went</h3>
         <p class="section-note">
-          Measured from our own server on a fast connection, so these numbers describe the site itself
-          rather than your connection to it.
+          Measured from our own server on a fast connection, so these numbers describe the site
+          itself rather than your connection to it.
         </p>
         <div class="panel">
           <dwc-waterfall .phases=${phases}></dwc-waterfall>

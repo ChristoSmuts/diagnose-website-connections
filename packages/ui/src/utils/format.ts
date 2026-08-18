@@ -28,6 +28,18 @@ export function formatWhen(iso: string, now: Date = new Date()): string {
   return then.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+/**
+ * Durations, with a space before the unit.
+ *
+ * Mirrors the engine's own `ms()` helper so a number rendered by a chart matches
+ * the same number rendered in prose. "41 ms" reads as a measurement; "41ms"
+ * reads as an identifier, and the space also keeps the numeral visually separate
+ * when set in tabular figures.
+ */
+export function formatMs(value: number): string {
+  return `${String(Math.round(value))} ms`;
+}
+
 /** Human-readable byte sizes for evidence rows. */
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${String(Math.round(bytes))} B`;

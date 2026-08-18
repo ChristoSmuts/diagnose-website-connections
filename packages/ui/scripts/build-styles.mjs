@@ -54,4 +54,6 @@ writeFileSync(
   'utf8',
 );
 
-console.error(`build-styles: ${String(Math.round(css.length / 1024))} KB → src/styles/generated.ts`);
+console.error(
+  `build-styles: ${String(Math.round(css.length / 1024))} KB → src/styles/generated.ts`,
+);

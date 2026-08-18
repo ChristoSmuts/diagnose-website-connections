@@ -113,7 +113,9 @@ function handshake(
       socket.destroy();
       reject(new Error(`TLS handshake timed out after ${timeoutMs}ms`));
     });
-    socket.once('error', (error) => {
+    // Typed explicitly: `once` is declared with an `any[]` listener, so without
+    // this the rejection reason is `any` and nothing guarantees it is an Error.
+    socket.once('error', (error: Error) => {
       socket.destroy();
       reject(error);
     });
@@ -171,7 +173,14 @@ export async function probeTls(
   // is the actual saving a returning visitor gets, which a single handshake
   // cannot show.
   let resumedMs: number | null = null;
+
+  // Stays null unless a second handshake actually demonstrates resumption.
+  // Every path out of the block below deliberately leaves it null rather than
+  // reporting "unsupported": claiming a site has resumption disabled when we
+  // merely failed to prove otherwise is exactly the false accusation this tool
+  // exists to avoid.
   let resumptionSupported: boolean | null = null;
+
   if (session !== undefined) {
     try {
       const second = await handshake(address, host, port, timeoutMs, session);
@@ -179,16 +188,13 @@ export async function probeTls(
       resumptionSupported = second.socket.isSessionReused();
       second.socket.destroy();
     } catch {
-      // The second connection failed for some network reason. That tells us
-      // nothing about resumption support, so it stays unknown rather than
-      // becoming an accusation.
-      resumptionSupported = null;
+      // The second connection failed for some network reason, which says nothing
+      // either way about resumption support. Left null.
     }
-  } else {
-    // No ticket was ever offered. Genuinely inconclusive — some servers only
-    // issue one after application data — so report unknown, not "unsupported".
-    resumptionSupported = null;
   }
+  // No `else`: when no ticket was ever offered the result is genuinely
+  // inconclusive — some servers only issue one after application data — so it
+  // stays null too.
 
   return {
     handshakeMs: measured(first.handshakeMs, 'ms'),
@@ -221,7 +227,10 @@ export async function probeTls(
  * always wait briefly for the real ticket and only fall back to whatever was
  * available at handshake time (which is the correct value for TLS 1.2).
  */
-function waitForSession(socket: TLSSocket, existing: Buffer | undefined): Promise<Buffer | undefined> {
+function waitForSession(
+  socket: TLSSocket,
+  existing: Buffer | undefined,
+): Promise<Buffer | undefined> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
       socket.off('session', onSession);
@@ -337,7 +346,7 @@ function countChain(peer: PeerCertificate): number {
     if (seen.has(fingerprint)) break;
     seen.add(fingerprint);
     depth += 1;
-    current = current.issuerCertificate as PeerCertificate | undefined;
+    current = current.issuerCertificate;
   }
 
   return depth;

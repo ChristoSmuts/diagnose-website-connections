@@ -1,10 +1,5 @@
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
-import cors from '@fastify/cors';
-import helmet from '@fastify/helmet';
-import rateLimit from '@fastify/rate-limit';
-import fastifyStatic from '@fastify/static';
 import {
   CreateSiteRequestSchema,
   ListSitesQuerySchema,
@@ -17,6 +12,11 @@ import {
 } from '@dwc/contracts';
 import { analyse } from '@dwc/diagnostics';
 import { openDatabase, DuplicateSiteError, type Repositories } from '@dwc/persistence';
+import cors from '@fastify/cors';
+import helmet from '@fastify/helmet';
+import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import type { Config } from './config.ts';
 import { resolvePrincipal, expectedToken } from './principal.ts';
 import { runServerProbe } from './probes/run.ts';
@@ -207,9 +207,7 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
     if (principal === null) return reply;
 
     const { id } = request.params as { id: string };
-    return repos.sites.hardDelete(principal.id, id)
-      ? reply.status(204).send()
-      : notFound(reply);
+    return repos.sites.hardDelete(principal.id, id) ? reply.status(204).send() : notFound(reply);
   });
 
   // --- reports -------------------------------------------------------------
@@ -250,9 +248,7 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
     const principal = requirePrincipal(request, reply);
     if (principal === null) return reply;
     const { id } = request.params as { id: string };
-    return repos.reports.hardDelete(principal.id, id)
-      ? reply.status(204).send()
-      : notFound(reply);
+    return repos.reports.hardDelete(principal.id, id) ? reply.status(204).send() : notFound(reply);
   });
 
   // --- the diagnostic itself, streamed -------------------------------------
@@ -314,7 +310,12 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
         send({ type: 'phase', phase, status, message });
       });
 
-      send({ type: 'phase', phase: 'analysing', status: 'started', message: 'Working out what it means…' });
+      send({
+        type: 'phase',
+        phase: 'analysing',
+        status: 'started',
+        message: 'Working out what it means…',
+      });
 
       // The browser has not reported yet, so the verdict deliberately cannot
       // blame the user's connection. It is revised when client evidence arrives.

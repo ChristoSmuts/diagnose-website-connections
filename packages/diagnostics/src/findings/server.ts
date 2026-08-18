@@ -1,6 +1,6 @@
 import type { Finding, ServerEvidence } from '@dwc/contracts';
-import { CERT_EXPIRY, OUTDATED_TLS_PROTOCOLS, THRESHOLDS, classify } from '../thresholds.js';
 import { instabilityRatio } from '../stats.js';
+import { CERT_EXPIRY, OUTDATED_TLS_PROTOCOLS, THRESHOLDS, classify } from '../thresholds.js';
 import { finding, formatBytes, ms } from './helpers.js';
 
 /** DNS: the delay before anything else can even begin. */
@@ -19,10 +19,17 @@ export function detectDnsFindings(server: ServerEvidence): Finding[] {
         plain: `Before a browser can load anything, it has to turn "${server.target.host}" into a numeric address. That step took ${ms(lookup)}.`,
         impact:
           'Every visitor pays this delay before the page even starts loading, and it happens again whenever the lookup expires.',
-        technical: `DNS resolution took ${ms(lookup)}. Healthy authoritative nameservers typically answer in under ${THRESHOLDS.dnsMs.ok}ms.`,
+        technical: `DNS resolution took ${ms(lookup)}. Healthy authoritative nameservers typically answer in under ${THRESHOLDS.dnsMs.ok} ms.`,
         evidence: [
           { label: 'DNS lookup time', value: ms(lookup) },
-          { label: 'Nameservers', value: server.dns.records.filter((r) => r.type === 'NS').map((r) => r.value).join(', ') || 'none found' },
+          {
+            label: 'Nameservers',
+            value:
+              server.dns.records
+                .filter((r) => r.type === 'NS')
+                .map((r) => r.value)
+                .join(', ') || 'none found',
+          },
         ],
         remediation: {
           summary: 'Move DNS to a provider with a global anycast network.',
@@ -31,7 +38,7 @@ export function detectDnsFindings(server: ServerEvidence): Finding[] {
             'Move DNS hosting to an anycast provider so lookups are answered from a server near each visitor.',
             'Keep the record TTLs reasonably long so answers get cached and the lookup is skipped entirely for repeat visitors.',
           ],
-          expectedImprovement: 'Typically brings lookups under 30ms worldwide.',
+          expectedImprovement: 'Typically brings lookups under 30 ms worldwide.',
         },
       }),
     );
@@ -50,7 +57,9 @@ export function detectDnsFindings(server: ServerEvidence): Finding[] {
         impact:
           'Some people may reach an old server, or fail to reach the site at all, while it looks perfectly fine to everyone else — the classic "works for me" problem.',
         technical: server.dns.resolvers
-          .map((r) => `${r.resolverName} (${r.resolver}) → ${r.addresses.join(', ') || 'no answer'}`)
+          .map(
+            (r) => `${r.resolverName} (${r.resolver}) → ${r.addresses.join(', ') || 'no answer'}`,
+          )
           .join('; '),
         evidence: server.dns.resolvers.map((r) => ({
           label: r.resolverName,
@@ -157,7 +166,12 @@ export function detectConnectivityFindings(server: ServerEvidence): Finding[] {
     return out;
   }
 
-  if (v6.length > 0 && v4.length > 0 && v6.every((a) => !a.reachable) && v4.some((a) => a.reachable)) {
+  if (
+    v6.length > 0 &&
+    v4.length > 0 &&
+    v6.every((a) => !a.reachable) &&
+    v4.some((a) => a.reachable)
+  ) {
     out.push(
       finding({
         code: 'ipv6-broken',
@@ -237,7 +251,7 @@ export function detectConnectivityFindings(server: ServerEvidence): Finding[] {
             'A CDN terminates connections close to each visitor instead of at the origin server.',
             'If most visitors are in one region, hosting the origin in that region helps on its own.',
           ],
-          expectedImprovement: 'Usually cuts connection time to under 30ms for most visitors.',
+          expectedImprovement: 'Usually cuts connection time to under 30 ms for most visitors.',
         },
       }),
     );
@@ -314,7 +328,8 @@ export function detectTlsFindings(server: ServerEvidence): Finding[] {
           owner: 'site-owner',
           title: 'The security certificate is for a different website',
           plain: `The certificate this site presents does not list "${server.target.host}" as one of its names.`,
-          impact: 'Browsers block the site with a security warning, because this is indistinguishable from an impersonation attempt.',
+          impact:
+            'Browsers block the site with a security warning, because this is indistinguishable from an impersonation attempt.',
           technical: `Requested ${server.target.host}; certificate covers: ${cert.subjectAltNames.join(', ') || 'nothing listed'}.`,
           evidence: [
             { label: 'Requested host', value: server.target.host },
@@ -339,7 +354,8 @@ export function detectTlsFindings(server: ServerEvidence): Finding[] {
           owner: 'site-owner',
           title: 'The security handshake sends more data than necessary',
           plain: `Proving the site's identity involves ${cert.chainLength} certificates, which all have to be sent before anything else can happen.`,
-          impact: 'Adds bytes and sometimes an extra round trip to every new connection, worst on slow mobile links.',
+          impact:
+            'Adds bytes and sometimes an extra round trip to every new connection, worst on slow mobile links.',
           technical: `Certificate chain depth is ${cert.chainLength}.`,
           evidence: [{ label: 'Chain length', value: String(cert.chainLength) }],
           remediation: {
@@ -420,8 +436,10 @@ export function detectTlsFindings(server: ServerEvidence): Finding[] {
         title: 'Returning visitors redo the full security handshake',
         plain:
           'The site does not let browsers resume a previous secure session, so every connection is negotiated from scratch.',
-        impact: 'Repeat visitors and additional connections pay the full handshake cost every time.',
-        technical: 'Session resumption via TLS session tickets was not offered on a second handshake.',
+        impact:
+          'Repeat visitors and additional connections pay the full handshake cost every time.',
+        technical:
+          'Session resumption via TLS session tickets was not offered on a second handshake.',
         remediation: {
           summary: 'Enable TLS session tickets or a session cache.',
           steps: [
@@ -486,11 +504,20 @@ export function detectHttpFindings(server: ServerEvidence): Finding[] {
         technical: `HTTP ${http.status} received for ${server.target.normalizedUrl}.`,
         evidence: [{ label: 'Status', value: String(http.status) }],
         remediation: {
-          summary: http.status >= 500 ? 'Check the server’s error logs.' : 'Check the address and access rules.',
+          summary:
+            http.status >= 500
+              ? 'Check the server’s error logs.'
+              : 'Check the address and access rules.',
           steps:
             http.status >= 500
-              ? ['Look at the application and web server error logs for the failing request.', 'Check that backing services such as the database are reachable.']
-              : ['Confirm the URL is correct.', 'Check access rules, firewalls, or bot protection that might be blocking automated requests.'],
+              ? [
+                  'Look at the application and web server error logs for the failing request.',
+                  'Check that backing services such as the database are reachable.',
+                ]
+              : [
+                  'Confirm the URL is correct.',
+                  'Check access rules, firewalls, or bot protection that might be blocking automated requests.',
+                ],
         },
       }),
     );
@@ -524,7 +551,7 @@ export function detectHttpFindings(server: ServerEvidence): Finding[] {
             'Check for slow calls to third-party APIs made while rendering the page.',
             'On serverless hosting, check whether cold starts are responsible.',
           ],
-          expectedImprovement: 'Caching commonly brings this under 100ms.',
+          expectedImprovement: 'Caching commonly brings this under 100 ms.',
         },
       }),
     );
@@ -541,7 +568,9 @@ export function detectHttpFindings(server: ServerEvidence): Finding[] {
         title: 'Visitors are bounced through several addresses first',
         plain: `Loading this page involves ${http.redirects.length} redirects before arriving at the real content, costing about ${ms(totalMs)}.`,
         impact: 'Every visitor pays this delay on arrival, and it is entirely avoidable.',
-        technical: http.redirects.map((r) => `${r.status} ${r.url} → ${r.location ?? '?'}`).join('\n'),
+        technical: http.redirects
+          .map((r) => `${r.status} ${r.url} → ${r.location ?? '?'}`)
+          .join('\n'),
         evidence: http.redirects.map((r, i) => ({
           label: `Hop ${i + 1}`,
           value: `${r.status} → ${r.location ?? 'unknown'} (${ms(r.durationMs.value ?? 0)})`,
@@ -570,7 +599,8 @@ export function detectHttpFindings(server: ServerEvidence): Finding[] {
           'Text-based content compresses extremely well, but this site sends it as-is — so visitors download several times more data than they need to.',
         impact:
           'Pages take noticeably longer on mobile and slower connections, and visitors on metered plans pay for the extra data.',
-        technical: 'No Content-Encoding header was returned; the response was not gzip, brotli or zstd encoded.',
+        technical:
+          'No Content-Encoding header was returned; the response was not gzip, brotli or zstd encoded.',
         evidence: [
           {
             label: 'Transferred',
@@ -587,7 +617,7 @@ export function detectHttpFindings(server: ServerEvidence): Finding[] {
           ],
           snippet: {
             language: 'nginx',
-            code: "gzip on;\ngzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;\ngzip_min_length 1024;",
+            code: 'gzip on;\ngzip_types text/plain text/css application/json application/javascript text/xml application/xml image/svg+xml;\ngzip_min_length 1024;',
             caption: 'nginx',
           },
           expectedImprovement: 'Typically reduces text payloads by 60–80%.',
@@ -626,8 +656,10 @@ export function detectHttpFindings(server: ServerEvidence): Finding[] {
         severity: 'info',
         owner: 'site-owner',
         title: 'The newest transfer protocol is not offered',
-        plain: 'The site does not advertise HTTP/3, the newest protocol, which copes better with unreliable connections.',
-        impact: 'Visitors on mobile networks would see modestly faster, more resilient loading with it enabled.',
+        plain:
+          'The site does not advertise HTTP/3, the newest protocol, which copes better with unreliable connections.',
+        impact:
+          'Visitors on mobile networks would see modestly faster, more resilient loading with it enabled.',
         technical: 'No Alt-Svc header advertising h3 was present.',
         remediation: {
           summary: 'Enable HTTP/3 if the server or CDN supports it.',
@@ -674,7 +706,8 @@ export function detectHttpFindings(server: ServerEvidence): Finding[] {
         owner: 'site-owner',
         title: 'The page is heavy',
         plain: `This page transfers ${formatBytes(bytes)}, which is a lot for a single document.`,
-        impact: 'On a typical mobile connection this alone adds seconds to the load, and costs visitors data.',
+        impact:
+          'On a typical mobile connection this alone adds seconds to the load, and costs visitors data.',
         technical: `Transferred ${formatBytes(bytes)}${http.uncompressedBytes.value !== null ? ` (${formatBytes(http.uncompressedBytes.value)} uncompressed)` : ''}.`,
         evidence: [{ label: 'Transferred', value: formatBytes(bytes) }],
         remediation: {
@@ -733,7 +766,13 @@ export function detectStabilityFindings(server: ServerEvidence): Finding[] {
 
   const cold = stability.coldTtfbMs.value;
   const warm = stability.warmTtfbMs.value;
-  if (cold !== null && warm !== null && cold > 0 && warm / cold > 0.9 && cold > THRESHOLDS.ttfbMs.ok) {
+  if (
+    cold !== null &&
+    warm !== null &&
+    cold > 0 &&
+    warm / cold > 0.9 &&
+    cold > THRESHOLDS.ttfbMs.ok
+  ) {
     out.push(
       finding({
         code: 'no-cdn-caching-benefit',
@@ -742,7 +781,8 @@ export function detectStabilityFindings(server: ServerEvidence): Finding[] {
         confidence: 'medium',
         title: 'Repeat requests are no faster than the first',
         plain: `The first request took ${ms(cold)} and later identical requests took about the same. Nothing is being cached.`,
-        impact: 'Every single request does the full amount of work, so the site cannot absorb traffic spikes.',
+        impact:
+          'Every single request does the full amount of work, so the site cannot absorb traffic spikes.',
         technical: `Cold TTFB ${ms(cold)} vs warm TTFB ${ms(warm)} — effectively no caching benefit.`,
         evidence: [
           { label: 'First request', value: ms(cold) },

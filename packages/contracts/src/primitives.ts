@@ -48,7 +48,11 @@ export const MetricSchema = z
 export type Metric = z.infer<typeof MetricSchema>;
 
 /** Convenience constructors — keep call sites honest and terse. */
-export const measured = (value: number, unit: Unit): Metric => ({ value, unit, provenance: 'measured' });
+export const measured = (value: number, unit: Unit): Metric => ({
+  value,
+  unit,
+  provenance: 'measured',
+});
 export const inferred = (value: number, unit: Unit, basis: string): Metric => ({
   value,
   unit,

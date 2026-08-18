@@ -76,8 +76,11 @@ export function migrate(db: Database.Database): { from: number; to: number; appl
       applied.push(`${migration.version}: ${migration.name}`);
     } catch (error) {
       db.exec('ROLLBACK');
+      // `cause` matters here: the SQLite error carries the offending statement,
+      // and a failed migration at boot is precisely when that detail is needed.
       throw new Error(
         `Migration ${migration.version} (${migration.name}) failed: ${(error as Error).message}`,
+        { cause: error },
       );
     }
   }

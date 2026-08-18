@@ -1,5 +1,5 @@
-import { isIP } from 'node:net';
 import { Resolver } from 'node:dns/promises';
+import { isIP } from 'node:net';
 
 /**
  * Server-Side Request Forgery protection.
@@ -209,7 +209,10 @@ export interface SafeResolution {
  * worked. Relying on system DNS would make measurements depend on wherever the
  * container happens to run.
  */
-export async function resolveSafely(host: string, resolvers: readonly string[]): Promise<SafeResolution> {
+export async function resolveSafely(
+  host: string,
+  resolvers: readonly string[],
+): Promise<SafeResolution> {
   // A literal IP has already been validated by normalizeUrl.
   const family = isIP(host);
   if (family !== 0) {

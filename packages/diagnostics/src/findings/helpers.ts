@@ -75,4 +75,21 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-export const ms = (n: number): string => `${Math.round(n)}ms`;
+/**
+ * Durations, with a space before the unit.
+ *
+ * "41 ms" rather than "41ms": the space is the typographic convention for a unit
+ * and it reads as a measurement instead of an identifier. Also keeps the numeral
+ * visually separate when set in tabular figures.
+ */
+export const ms = (n: number): string => `${String(Math.round(n))} ms`;
+
+/**
+ * Pluralises a counted noun properly.
+ *
+ * Replaces "4 address(es)" and "0 hop(s)". Parenthesised plurals are the sort of
+ * thing that reads as a placeholder nobody came back to, and the report is meant
+ * to be forwarded to a hosting provider or client.
+ */
+export const plural = (count: number, singular: string, pluralForm?: string): string =>
+  `${String(count)} ${count === 1 ? singular : (pluralForm ?? `${singular}s`)}`;

@@ -1,7 +1,7 @@
-import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import type { ProbePhase, Report, ReportSummary, SiteWithSummary, Verdict } from '@dwc/contracts';
 import { applyTheme, readStoredTheme, THEME_STORAGE_KEY, type ThemeChoice } from '@dwc/tokens';
 import { sharedStyles, type ProgressStep } from '@dwc/ui';
+import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import '@dwc/ui';
 import './report-view.js';
 import { ApiError, api, streamDiagnostic } from './api-client.js';
@@ -29,6 +29,37 @@ export class DwcApp extends LitElement {
         min-height: 100vh;
         min-height: 100dvh;
         background: var(--dwc-surface);
+        /* The backdrop is painted behind everything via ::before below. */
+        isolation: isolate;
+      }
+
+      /*
+       * Ambient backdrop.
+       *
+       * Two very faint offset gradients rather than a flat fill, so the page has
+       * some depth behind the content without any element needing a background of
+       * its own. Fixed, so it stays put while the report scrolls — a scrolling
+       * gradient reads as a moving object and is distracting.
+       *
+       * Purely decorative: pointer-events off, and it drops out for print.
+       */
+      :host::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        background:
+          radial-gradient(
+            60rem 40rem at 12% -10%,
+            color-mix(in oklab, var(--dwc-brand) 7%, transparent),
+            transparent 60%
+          ),
+          radial-gradient(
+            50rem 36rem at 92% 4%,
+            color-mix(in oklab, var(--dwc-info) 6%, transparent),
+            transparent 60%
+          );
       }
 
       /* Mobile-first: single column, sidebar becomes an overlay drawer.
@@ -42,14 +73,18 @@ export class DwcApp extends LitElement {
       header {
         position: sticky;
         top: 0;
-        z-index: 20;
+        z-index: var(--dwc-z-sticky);
         display: flex;
         align-items: center;
         gap: var(--dwc-space-3);
+        min-height: var(--dwc-header-height);
+        box-sizing: border-box;
         padding: var(--dwc-space-3) var(--dwc-space-4);
         border-bottom: 1px solid var(--dwc-border);
-        background: color-mix(in oklab, var(--dwc-surface) 88%, transparent);
-        backdrop-filter: blur(8px);
+        /* Translucent rather than opaque so content scrolling beneath is faintly
+           visible — the bar reads as floating over the page, not capping it. */
+        background: color-mix(in oklab, var(--dwc-surface) 78%, transparent);
+        backdrop-filter: blur(14px) saturate(1.4);
       }
 
       .brand {
@@ -61,9 +96,18 @@ export class DwcApp extends LitElement {
         color: var(--dwc-text);
         margin-right: auto;
       }
-      .brand dwc-icon {
+      .brand-mark {
+        display: grid;
+        place-items: center;
+        width: 1.875rem;
+        height: 1.875rem;
+        border-radius: var(--dwc-radius);
+        background: color-mix(in oklab, var(--dwc-brand) 14%, var(--dwc-surface-raised));
+        border: 1px solid var(--dwc-brand-border);
         color: var(--dwc-brand);
-        --dwc-icon-size: 1.375rem;
+        --dwc-icon-size: 1.125rem;
+        --dwc-icon-back: var(--dwc-brand);
+        --dwc-icon-back-opacity: 0.3;
       }
 
       .menu-button {
@@ -87,7 +131,7 @@ export class DwcApp extends LitElement {
       aside {
         position: fixed;
         inset: 0 auto 0 0;
-        z-index: 30;
+        z-index: var(--dwc-z-drawer);
         width: min(var(--dwc-sidebar-width), 85vw);
         display: flex;
         flex-direction: column;
@@ -107,8 +151,9 @@ export class DwcApp extends LitElement {
       .scrim {
         position: fixed;
         inset: 0;
-        z-index: 25;
-        background: oklch(0% 0 0 / 0.4);
+        z-index: var(--dwc-z-scrim);
+        background: oklch(0% 0 0 / 0.45);
+        backdrop-filter: blur(2px);
         border: none;
       }
 
@@ -129,12 +174,26 @@ export class DwcApp extends LitElement {
           grid-template-columns: var(--dwc-sidebar-width) 1fr;
         }
         aside {
+          /*
+           * Two things were stopping this from sticking.
+           *
+           * 1. "inset: auto" was declared *after* "top". It is the shorthand for
+           *    all four offsets, so it reset top back to auto — and a sticky
+           *    element with top:auto has no offset to stick at. It has to come
+           *    first, to clear the fixed insets the mobile drawer rule sets.
+           *
+           * 2. As a grid item it stretched to the full row height by default, so
+           *    it was always exactly as tall as its container and had no room to
+           *    move within it. "align-self: start" is what gives sticky something
+           *    to do.
+           */
+          inset: auto;
           position: sticky;
-          top: 3.5rem;
-          height: calc(100dvh - 3.5rem);
+          align-self: start;
+          top: var(--dwc-header-height);
+          height: calc(100dvh - var(--dwc-header-height));
           transform: none;
           box-shadow: none;
-          inset: auto;
         }
         .menu-button,
         .scrim {
@@ -174,18 +233,49 @@ export class DwcApp extends LitElement {
       }
       h1 {
         margin: 0;
-        font-size: var(--dwc-text-3xl);
+        font-family: var(--dwc-font-display);
+        font-size: var(--dwc-text-4xl);
         font-weight: var(--dwc-weight-bold);
         line-height: var(--dwc-leading-tight);
+        letter-spacing: var(--dwc-tracking-tight);
         color: var(--dwc-text);
         text-wrap: balance;
       }
       .lede {
         margin: 0 auto;
-        max-width: 54ch;
+        max-width: 52ch;
         font-size: var(--dwc-text-lg);
         line-height: var(--dwc-leading-relaxed);
         color: var(--dwc-text-muted);
+        text-wrap: pretty;
+      }
+
+      /* Example domains, so the empty state is one click from a real result
+         instead of a blank field the reader has to think of input for. */
+      .examples {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: center;
+        gap: var(--dwc-space-2);
+        font-size: var(--dwc-text-sm);
+        color: var(--dwc-text-subtle);
+      }
+      .example {
+        min-height: 2rem;
+        padding: var(--dwc-space-1) var(--dwc-space-3);
+        border: 1px solid var(--dwc-border);
+        border-radius: var(--dwc-radius-full);
+        background: var(--dwc-surface-raised);
+        color: var(--dwc-text-muted);
+        font-family: var(--dwc-font-mono);
+        font-size: var(--dwc-text-xs);
+        cursor: pointer;
+      }
+      .example:hover {
+        border-color: var(--dwc-brand-border);
+        background: var(--dwc-brand-subtle);
+        color: var(--dwc-brand-text);
       }
 
       .input-wrap {
@@ -215,6 +305,9 @@ export class DwcApp extends LitElement {
         border: 1px solid var(--dwc-border);
         border-radius: var(--dwc-radius-lg);
         background: var(--dwc-surface-raised);
+        box-shadow:
+          inset 0 1px 0 var(--dwc-highlight),
+          var(--dwc-shadow-sm);
       }
 
       .error {
@@ -249,6 +342,9 @@ export class DwcApp extends LitElement {
       }
 
       @media print {
+        :host::before {
+          display: none;
+        }
         header,
         aside,
         .report-actions,
@@ -353,9 +449,7 @@ export class DwcApp extends LitElement {
   }
 
   private setStep(key: string, status: ProgressStep['status'], message: string): void {
-    this.steps = this.steps.map((step) =>
-      step.key === key ? { ...step, status, message } : step,
-    );
+    this.steps = this.steps.map((step) => (step.key === key ? { ...step, status, message } : step));
   }
 
   private async diagnose(url: string, siteId?: string): Promise<void> {
@@ -463,7 +557,9 @@ export class DwcApp extends LitElement {
           </button>
 
           <span class="brand">
-            <dwc-icon name="route"></dwc-icon>
+            <span class="brand-mark">
+              <dwc-icon name="route" weight="duotone"></dwc-icon>
+            </span>
             Connection Diagnostics
           </span>
 
@@ -481,9 +577,11 @@ export class DwcApp extends LitElement {
       <dwc-dialog
         .open=${this.pendingDelete !== null}
         heading="Delete permanently?"
-        message=${this.pendingDelete === null
-          ? ''
-          : `"${this.pendingDelete.label}" will be deleted for good. Archiving keeps it out of the way but recoverable — deleting cannot be undone.`}
+        message=${
+          this.pendingDelete === null
+            ? ''
+            : `"${this.pendingDelete.label}" will be deleted for good. Archiving keeps it out of the way but recoverable — deleting cannot be undone.`
+        }
         confirm-label="Delete permanently"
         danger
         @confirm=${() => void this.confirmDelete()}
@@ -496,15 +594,17 @@ export class DwcApp extends LitElement {
 
   private renderSidebar(): TemplateResult {
     return html`
-      ${this.sidebarOpen
-        ? html`<button
-            class="scrim"
-            aria-label="Close menu"
-            @click=${() => {
-              this.sidebarOpen = false;
-            }}
-          ></button>`
-        : nothing}
+      ${
+        this.sidebarOpen
+          ? html`<button
+              class="scrim"
+              aria-label="Close menu"
+              @click=${() => {
+                this.sidebarOpen = false;
+              }}
+            ></button>`
+          : nothing
+      }
 
       <aside data-open=${this.sidebarOpen ? 'true' : 'false'} aria-label="Saved sites">
         <div class="sidebar-head">
@@ -574,9 +674,7 @@ export class DwcApp extends LitElement {
     if (this.report !== null && !this.running) {
       return html`
         <div class="report-head no-print">
-          <h2 class="report-title">
-            ${this.report.evidence?.server.target.host ?? 'Report'}
-          </h2>
+          <h2 class="report-title">${this.report.evidence?.server.target.host ?? 'Report'}</h2>
           <div class="report-actions">
             <dwc-button
               size="sm"
@@ -620,6 +718,24 @@ export class DwcApp extends LitElement {
         ></dwc-url-input>
       </div>
 
+      <!-- One click to a real result. An empty field with no suggestion makes the
+           reader supply both the intent and the example. -->
+      <div class="examples">
+        <span>Try</span>
+        ${['example.com', 'wikipedia.org', 'info.cern.ch'].map(
+          (host) => html`
+            <button
+              class="example"
+              type="button"
+              ?disabled=${this.running}
+              @click=${() => void this.diagnose(host)}
+            >
+              ${host}
+            </button>
+          `,
+        )}
+      </div>
+
       <label class="consent">
         <input
           type="checkbox"
@@ -634,17 +750,22 @@ export class DwcApp extends LitElement {
         </span>
       </label>
 
-      ${this.error === null
-        ? nothing
-        : html`<p class="error" role="alert"><dwc-icon name="warning"></dwc-icon>${this.error}</p>`}
-
-      ${this.running
-        ? html`
-            <div class="panel">
-              <dwc-progress-steps .steps=${this.steps}></dwc-progress-steps>
-            </div>
-          `
-        : nothing}
+      ${
+        this.error === null
+          ? nothing
+          : html`<p class="error" role="alert">
+              <dwc-icon name="warning"></dwc-icon>${this.error}
+            </p>`
+      }
+      ${
+        this.running
+          ? html`
+              <div class="panel">
+                <dwc-progress-steps .steps=${this.steps}></dwc-progress-steps>
+              </div>
+            `
+          : nothing
+      }
     `;
   }
 

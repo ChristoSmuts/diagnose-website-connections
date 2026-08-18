@@ -105,6 +105,21 @@ export const FindingCodeSchema = z.enum([
 export type FindingCode = z.infer<typeof FindingCodeSchema>;
 
 /**
+ * One supporting number, ready to render.
+ *
+ * Shared by findings and checks so both render through the same component and,
+ * more importantly, so both are forced to carry provenance. A row that renders
+ * an inferred number as though it were observed is the failure this type exists
+ * to prevent.
+ */
+export const EvidenceRowSchema = z.object({
+  label: z.string(),
+  value: z.string(),
+  provenance: z.enum(['measured', 'inferred', 'unavailable']),
+});
+export type EvidenceRow = z.infer<typeof EvidenceRowSchema>;
+
+/**
  * Concrete, actionable fix guidance — Layer 3.
  *
  * `steps` are imperative and specific; `snippet` is copyable config. Both are
@@ -149,21 +164,83 @@ export const FindingSchema = z.object({
 
   /** Layer 3: the precise technical explanation. */
   technical: z.string(),
-  /** Layer 3: the supporting numbers, as label/value pairs ready to render. */
-  evidence: z
-    .array(
-      z.object({
-        label: z.string(),
-        value: z.string(),
-        /** Mirrors Metric provenance so the UI can badge each row. */
-        provenance: z.enum(['measured', 'inferred', 'unavailable']),
-      }),
-    )
-    .default([]),
+  /** Layer 3: the supporting numbers, each badged with its provenance. */
+  evidence: z.array(EvidenceRowSchema).default([]),
 
   remediation: RemediationSchema.nullable().default(null),
 });
 export type Finding = z.infer<typeof FindingSchema>;
+
+// ---------------------------------------------------------------------------
+// Checks — the full diagnostic surface, including everything that passed
+// ---------------------------------------------------------------------------
+
+/**
+ * Outcome of a single check.
+ *
+ * `skipped` and `unavailable` are deliberately separate. "We did not run this"
+ * and "we ran it and could not tell" are different facts, and collapsing them
+ * into one grey state is how a report starts implying it looked at things it
+ * never did. The first is usually about our environment (no IPv6 route from this
+ * host), the second about the target (closed the connection early).
+ */
+export const CheckStatusSchema = z.enum(['pass', 'warn', 'fail', 'skipped', 'unavailable']);
+export type CheckStatus = z.infer<typeof CheckStatusSchema>;
+
+/** Grouping for the UI, following the order a request actually happens in. */
+export const CheckPhaseSchema = z.enum([
+  'dns',
+  'connectivity',
+  'tls',
+  'http',
+  'stability',
+  'network',
+  'client',
+]);
+export type CheckPhase = z.infer<typeof CheckPhaseSchema>;
+
+export const CHECK_PHASE_ORDER: readonly CheckPhase[] = [
+  'dns',
+  'connectivity',
+  'tls',
+  'http',
+  'stability',
+  'network',
+  'client',
+] as const;
+
+/**
+ * One thing we looked at, whether or not anything was wrong with it.
+ *
+ * Findings only exist for problems, which left a healthy site with almost
+ * nothing to inspect — backwards for a diagnostics tool. Checks are the complete
+ * record: every probe performed, each with its own technical detail.
+ *
+ * Unlike a finding, a check has no `owner` or `severity`. It is an observation,
+ * not an accusation; when it warrants action it points at the finding that makes
+ * the case via `relatedFindings`.
+ */
+export const CheckSchema = z.object({
+  /** Stable identifier, e.g. `tls.resumption`. Safe to assert on in tests. */
+  id: z.string(),
+  phase: CheckPhaseSchema,
+  /** Short, human. "Session resumption", not "tls.resumption". */
+  title: z.string(),
+  status: CheckStatusSchema,
+  /** One line, readable, shown while collapsed. */
+  summary: z.string(),
+  /** The number or value that belongs on the collapsed row, pre-formatted. */
+  headline: z.string().nullable().default(null),
+  /**
+   * Layer 3, and deliberately NOT simplified. Someone expanding a check wants
+   * the real explanation: name the RFC, the header, the cipher, the exact value.
+   */
+  technical: z.string(),
+  evidence: z.array(EvidenceRowSchema).default([]),
+  /** Finding codes this check produced, so the UI can link the two. */
+  relatedFindings: z.array(FindingCodeSchema).default([]),
+});
+export type Check = z.infer<typeof CheckSchema>;
 
 /** A term used anywhere in the report, with a one-line plain definition. */
 export const GlossaryEntrySchema = z.object({
@@ -201,6 +278,17 @@ export const VerdictSchema = z.object({
 
   /** Layer 2, pre-sorted worst-first. */
   findings: z.array(FindingSchema),
+
+  /**
+   * Layer 3: every check performed, passes included, in phase order.
+   *
+   * Defaults to empty so reports stored before checks existed still parse and
+   * render — they simply have no checks section. Reports are immutable and keep
+   * their rendered `summary_json`, so history is read in its original terms;
+   * `engineVersion` is what tells you which terms those were.
+   */
+  checks: z.array(CheckSchema).default([]),
+
   glossary: z.array(GlossaryEntrySchema).default([]),
 
   /** Engine version, so an old report can be read in its original terms. */

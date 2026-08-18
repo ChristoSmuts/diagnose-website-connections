@@ -1,0 +1,22 @@
+{
+  "name": "@dwc/e2e",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Playwright end-to-end suite: journeys, accessibility, and visual regression.",
+  "scripts": {
+    "//e2e": "Deliberately NOT named 'test'. Turbo's `test` task would otherwise sweep this in, so `pnpm run test` would boot a browser and run real diagnostics \u2014 turning the fast unit gate into a ten-minute one. E2E is its own CI job.",
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "update-snapshots": "playwright test --update-snapshots",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "catalog:",
+    "@playwright/test": "catalog:",
+    "@types/node": "catalog:",
+    "axe-core": "catalog:",
+    "typescript": "catalog:"
+  }
+}

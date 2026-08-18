@@ -1,5 +1,5 @@
-import type { FastifyRequest } from 'fastify';
 import { LOCAL_PRINCIPAL, type Principal } from '@dwc/contracts';
+import type { FastifyRequest } from 'fastify';
 import type { Config } from './config.ts';
 
 /**

@@ -1,0 +1,104 @@
+{
+  "$comment": [
+    "Which Phosphor icons get compiled into the library, and at which weights.",
+    "",
+    "Phosphor ships 1512 icons in six weights. Only what is listed here is",
+    "extracted into src/icons/generated.ts by scripts/build-icons.mjs, so the",
+    "package stays small and @phosphor-icons/core remains a devDependency that",
+    "never reaches a consumer's runtime.",
+    "",
+    "Keys are our own stable semantic names. Values are Phosphor's file names.",
+    "The indirection is deliberate: renaming an icon upstream, or swapping which",
+    "glyph represents 'server', is then a one-line change here rather than a",
+    "find-and-replace across every component.",
+    "",
+    "Weights are chosen per use, not generated wholesale:",
+    "  regular  — all UI chrome. The default.",
+    "  fill     — status marks, where a solid shape reads more decisively.",
+    "  duotone  — the hero and section headers. Its rear path is recoloured to",
+    "             the verdict tone, which is where the personality comes from.",
+    "Generating all six for everything would roughly double the output for glyphs",
+    "nothing renders."
+  ],
+
+  "defaultWeights": ["regular"],
+
+  "icons": {
+    "check": "check",
+    "pass": "check-circle",
+    "warning": "warning",
+    "error": "x-circle",
+    "question": "question",
+    "info": "info",
+    "blocked": "prohibit",
+    "verified": "seal-check",
+
+    "server": "hard-drives",
+    "wifi": "wifi-high",
+    "route": "path",
+    "globe": "globe",
+    "network": "network",
+    "signpost": "signpost",
+
+    "lock": "lock-key",
+    "certificate": "certificate",
+    "shield": "shield-check",
+
+    "clock": "clock",
+    "gauge": "gauge",
+    "speed": "lightning",
+    "trend": "chart-line",
+    "download-cloud": "cloud-arrow-down",
+    "link": "link",
+
+    "chevron": "caret-right",
+    "chevron-down": "caret-down",
+    "plus": "plus",
+    "search": "magnifying-glass",
+    "filter": "funnel",
+    "more": "dots-three-vertical",
+    "menu": "list",
+    "close": "x",
+
+    "archive": "archive",
+    "trash": "trash",
+    "restore": "arrow-counter-clockwise",
+    "refresh": "arrows-clockwise",
+    "download": "download-simple",
+    "print": "printer",
+    "copy": "copy",
+    "pencil": "pencil-simple",
+    "spinner": "spinner",
+
+    "sun": "sun",
+    "moon": "moon",
+    "monitor": "monitor"
+  },
+
+  "extraWeights": {
+    "$comment": [
+      "A glyph with no enclosed area has no meaningful fill weight, and Phosphor",
+      "substitutes a different shape rather than a bolder outline. 'check-fill' is",
+      "a filled square CONTAINING a check, and 'spinner-fill' is a solid disc that",
+      "loses the spinner entirely — both would silently render the wrong icon.",
+      "That is why the filled pass mark is 'pass' (check-circle), which has a real",
+      "filled variant, and why bare 'check' and 'spinner' are regular-only.",
+      "Verify any new addition here by eye before trusting it."
+    ],
+    "fill": ["pass", "warning", "error", "info", "question", "blocked", "verified"],
+    "duotone": [
+      "server",
+      "wifi",
+      "route",
+      "globe",
+      "network",
+      "lock",
+      "certificate",
+      "shield",
+      "clock",
+      "gauge",
+      "speed",
+      "trend"
+    ]
+  }
+}

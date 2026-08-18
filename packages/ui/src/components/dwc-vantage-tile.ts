@@ -1,6 +1,6 @@
+import type { VantageStatus } from '@dwc/contracts';
 import { LitElement, css, html, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
-import type { VantageStatus } from '@dwc/contracts';
 import { sharedStyles } from '../styles/shared.js';
 import './dwc-icon.js';
 
@@ -158,9 +158,11 @@ export class DwcVantageTile extends LitElement {
           ${this.score === null ? null : html`<span class="score">${this.score}</span>`}
         </div>
 
-        ${this.score === null
-          ? null
-          : html`<div class="bar" aria-hidden="true"><i style="width: ${this.score}%"></i></div>`}
+        ${
+          this.score === null
+            ? null
+            : html`<div class="bar" aria-hidden="true"><i style="width: ${this.score}%"></i></div>`
+        }
 
         <p class="summary">${this.summary}</p>
       </div>

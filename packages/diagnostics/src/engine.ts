@@ -1,9 +1,10 @@
 import type { Evidence, Verdict } from '@dwc/contracts';
 import { attribute, temperConfidence, type Vantages } from './attribute.js';
-import { assessNetworkPath, assessServer, assessUserConnection } from './vantages.js';
+import { buildChecks } from './checks.js';
 import { detectFindings } from './findings/index.js';
 import { buildGlossary } from './glossary.js';
 import { narrate } from './narrate.js';
+import { assessNetworkPath, assessServer, assessUserConnection } from './vantages.js';
 
 /**
  * Stamped onto every verdict and stored with it.
@@ -12,7 +13,7 @@ import { narrate } from './narrate.js';
  * produced a conclusion is what stops an old stored report from being
  * reinterpreted under rules that did not exist when it was taken.
  */
-export const ENGINE_VERSION = '1.0.0';
+export const ENGINE_VERSION = '1.1.0';
 
 /**
  * Turn evidence into a verdict.
@@ -29,7 +30,12 @@ export function analyse(evidence: Evidence): Verdict {
   const vantages: Vantages = {
     server,
     userConnection,
-    networkPath: { status: path.status, label: path.label, summary: path.summary, score: path.score },
+    networkPath: {
+      status: path.status,
+      label: path.label,
+      summary: path.summary,
+      score: path.score,
+    },
   };
 
   const findings = detectFindings(evidence, path.excessMs);
@@ -45,6 +51,7 @@ export function analyse(evidence: Evidence): Verdict {
     confidenceReason: attribution.confidenceReason,
     vantages,
     findings,
+    checks: buildChecks(evidence, findings),
     glossary: buildGlossary(findings),
     engineVersion: ENGINE_VERSION,
   };

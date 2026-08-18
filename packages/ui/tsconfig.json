@@ -4,6 +4,11 @@
     "rootDir": "src",
     "outDir": "dist",
     "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    // Node types are available for typecheck because the test files read the
+    // filesystem (scanning tokens.css / component sources). tsconfig.build.json
+    // strips them back out, so shipped library code still cannot reach a Node
+    // API by accident — this is a browser package.
+    "types": ["node"],
     "experimentalDecorators": false,
     "useDefineForClassFields": true
   },

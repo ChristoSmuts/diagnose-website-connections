@@ -158,13 +158,15 @@ export class DwcUrlInput extends LitElement {
         </dwc-button>
       </form>
 
-      ${message === null
-        ? nothing
-        : html`
-            <p class="error" id=${errorId} role="alert">
-              <dwc-icon name="warning"></dwc-icon>${message}
-            </p>
-          `}
+      ${
+        message === null
+          ? nothing
+          : html`
+              <p class="error" id=${errorId} role="alert">
+                <dwc-icon name="warning"></dwc-icon>${message}
+              </p>
+            `
+      }
     `;
   }
 }

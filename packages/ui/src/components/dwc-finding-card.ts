@@ -1,6 +1,6 @@
+import type { Finding, Owner, Severity } from '@dwc/contracts';
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { Finding, Owner, Severity } from '@dwc/contracts';
 import { sharedStyles } from '../styles/shared.js';
 import './dwc-icon.js';
 import './dwc-badge.js';
@@ -267,11 +267,13 @@ export class DwcFindingCard extends LitElement {
           <div class="tags">
             <dwc-badge tone=${tone} dot>${SEVERITY_LABEL[f.severity]}</dwc-badge>
             <dwc-badge tone=${OWNER_TONE[f.owner]}>${OWNER_LABEL[f.owner]}</dwc-badge>
-            ${f.confidence === 'high'
-              ? nothing
-              : html`<dwc-badge tone="unknown"
-                  >${f.confidence === 'medium' ? 'Fairly confident' : 'Low confidence'}</dwc-badge
-                >`}
+            ${
+              f.confidence === 'high'
+                ? nothing
+                : html`<dwc-badge tone="unknown"
+                    >${f.confidence === 'medium' ? 'Fairly confident' : 'Low confidence'}</dwc-badge
+                  >`
+            }
           </div>
 
           <h3>${f.title}</h3>
@@ -300,72 +302,86 @@ export class DwcFindingCard extends LitElement {
 
     return html`
       <div class="details" id=${id}>
-        ${f.evidence.length === 0
-          ? nothing
-          : html`
-              <section>
-                <h4>What we measured</h4>
-                <dl>
-                  ${f.evidence.map(
-                    (row) => html`
-                      <div class="row">
-                        <dt>${row.label}</dt>
-                        <dd>
-                          ${row.value}
-                          ${row.provenance === 'measured'
-                            ? nothing
-                            : html`<span class="provenance">
-                                (${row.provenance === 'inferred' ? 'worked out' : 'not available'})
-                              </span>`}
-                        </dd>
-                      </div>
-                    `,
-                  )}
-                </dl>
-              </section>
-            `}
+        ${
+          f.evidence.length === 0
+            ? nothing
+            : html`
+                <section>
+                  <h4>What we measured</h4>
+                  <dl>
+                    ${f.evidence.map(
+                      (row) => html`
+                        <div class="row">
+                          <dt>${row.label}</dt>
+                          <dd>
+                            ${row.value}
+                            ${
+                              row.provenance === 'measured'
+                                ? nothing
+                                : html`<span class="provenance">
+                                    (${row.provenance === 'inferred' ? 'worked out' : 'not available'})
+                                  </span>`
+                            }
+                          </dd>
+                        </div>
+                      `,
+                    )}
+                  </dl>
+                </section>
+              `
+        }
 
         <section>
           <h4>In technical terms</h4>
           <div class="technical">${f.technical}</div>
         </section>
 
-        ${f.remediation === null
-          ? nothing
-          : html`
-              <section>
-                <h4>How to fix it</h4>
-                <p style="margin-bottom: var(--dwc-space-3)">${f.remediation.summary}</p>
-                <ol>
-                  ${f.remediation.steps.map((step) => html`<li>${step}</li>`)}
-                </ol>
+        ${
+          f.remediation === null
+            ? nothing
+            : html`
+                <section>
+                  <h4>How to fix it</h4>
+                  <p style="margin-bottom: var(--dwc-space-3)">${f.remediation.summary}</p>
+                  <ol>
+                    ${f.remediation.steps.map((step) => html`<li>${step}</li>`)}
+                  </ol>
 
-                ${f.remediation.snippet === null
-                  ? nothing
-                  : html`
-                      <div style="margin-top: var(--dwc-space-3)">
-                        <div class="snippet-head">
-                          <h4 style="margin: 0">
-                            ${f.remediation.snippet.caption ?? f.remediation.snippet.language}
-                          </h4>
-                          <dwc-button size="sm" variant="ghost" @click=${() => void this.copySnippet()}>
-                            <dwc-icon name=${this.copied ? 'check' : 'copy'}></dwc-icon>
-                            ${this.copied ? 'Copied' : 'Copy'}
-                          </dwc-button>
-                        </div>
-                        <pre><code>${f.remediation.snippet.code}</code></pre>
-                      </div>
-                    `}
-                ${f.remediation.expectedImprovement === null
-                  ? nothing
-                  : html`
-                      <p class="improvement" style="margin-top: var(--dwc-space-3)">
-                        <dwc-icon name="check"></dwc-icon>
-                        ${f.remediation.expectedImprovement}
-                      </p>
-                    `}
-              </section>
-            `}
+                  ${
+                    f.remediation.snippet === null
+                      ? nothing
+                      : html`
+                          <div style="margin-top: var(--dwc-space-3)">
+                            <div class="snippet-head">
+                              <h4 style="margin: 0">
+                                ${f.remediation.snippet.caption ?? f.remediation.snippet.language}
+                              </h4>
+                              <dwc-button
+                                size="sm"
+                                variant="ghost"
+                                @click=${() => void this.copySnippet()}
+                              >
+                                <dwc-icon name=${this.copied ? 'check' : 'copy'}></dwc-icon>
+                                ${this.copied ? 'Copied' : 'Copy'}
+                              </dwc-button>
+                            </div>
+                            <pre><code>${f.remediation.snippet.code}</code></pre>
+                          </div>
+                        `
+                  }
+                  ${
+                    f.remediation.expectedImprovement === null
+                      ? nothing
+                      : html`
+                          <p class="improvement" style="margin-top: var(--dwc-space-3)">
+                            <dwc-icon name="check"></dwc-icon>
+                            ${f.remediation.expectedImprovement}
+                          </p>
+                        `
+                  }
+                </section>
+              `
+        }
       </div>
     `;
   }

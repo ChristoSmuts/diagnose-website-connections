@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyse } from './engine.js';
+import { analyse, ENGINE_VERSION } from './engine.js';
 import { makeEvidence, scenarios } from './testing/fixtures.js';
 
 /**
@@ -328,7 +328,17 @@ describe('determinism', () => {
     expect(analyse(evidence)).toEqual(analyse(evidence));
   });
 
+  /**
+   * Asserts the invariant, not the literal.
+   *
+   * Pinning the exact string meant every deliberate bump failed a test that was
+   * not actually protecting anything. What matters is that the stamp is present,
+   * is real semver, and agrees with the exported constant — because a stored
+   * report is only readable in its original terms if that number is trustworthy.
+   */
   it('stamps the engine version so old reports stay readable', () => {
-    expect(analyse(scenarios.healthy()).engineVersion).toBe('1.0.0');
+    const stamped = analyse(scenarios.healthy()).engineVersion;
+    expect(stamped).toBe(ENGINE_VERSION);
+    expect(stamped).toMatch(/^\d+\.\d+\.\d+$/);
   });
 });

@@ -19,6 +19,45 @@
  * Omitting any one of them breaks either the toggle or the system default.
  */
 
+/*
+ * Self-hosted variable fonts.
+ *
+ * Declared here, at document level, deliberately: @font-face inside a shadow
+ * root is not reliably applied, and this sheet is already imported by the
+ * document while every component only inherits custom properties from it.
+ *
+ * Both are vendored into ../fonts (latin subset, ~88 KB for the pair) rather
+ * than fetched from a CDN, because this app must work fully offline and
+ * self-hosted with no third-party requests. Licences sit beside them.
+ *
+ * One variable file covers the whole weight range, so every weight below costs
+ * nothing extra. `font-display: swap` plus a preload in the app's index.html is
+ * what keeps the swap from being visible — no invented metric overrides here,
+ * since guessing `size-adjust` values tends to trade one layout shift for
+ * another.
+ */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('../fonts/inter-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2-variations');
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 :root {
   /* --- Neutrals: very slightly cool, so the UI reads calm rather than clinical */
   --dwc-surface: oklch(99% 0.002 250);
@@ -33,7 +72,10 @@
   /* 16.1:1 on --dwc-surface — comfortably past AAA for body text. */
   --dwc-text: oklch(23% 0.012 250);
   --dwc-text-muted: oklch(46% 0.012 250);
-  --dwc-text-subtle: oklch(58% 0.01 250);
+  /* 55%, not 58%: at 58% this measured 4.15:1 on the app surface, just under the
+     4.5:1 AA floor for normal text. It is used for the sidebar heading, empty
+     states and the example chips — all real content, none of it decorative. */
+  --dwc-text-subtle: oklch(55% 0.01 250);
   --dwc-text-inverse: oklch(99% 0.002 250);
 
   /* --- Brand: a confident azure. Trustworthy without being corporate-generic. */
@@ -75,11 +117,21 @@
   --dwc-focus: oklch(55% 0.18 254);
   --dwc-focus-ring: 0 0 0 2px var(--dwc-surface), 0 0 0 4px var(--dwc-focus);
 
-  /* --- Typography. System stack: fast, familiar, no webfont to download. */
-  --dwc-font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+  /* --- Typography.
+         Inter for text, JetBrains Mono for anything that is a value rather than
+         prose. The system stack stays behind each as a fallback, so a blocked or
+         failed font load degrades to exactly the previous design rather than to
+         Times New Roman. */
+  --dwc-font-sans:
+    'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
     Arial, sans-serif;
-  --dwc-font-mono: ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas,
+  --dwc-font-mono:
+    'JetBrains Mono Variable', ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas,
     'DejaVu Sans Mono', monospace;
+  /* Same family as body text, used at large sizes with tighter tracking. A
+     separate display face would be a third font to download for a handful of
+     headlines. */
+  --dwc-font-display: var(--dwc-font-sans);
 
   /* Fluid scale: readable on a phone, generous on a desktop, no breakpoints. */
   --dwc-text-xs: 0.75rem;
@@ -89,6 +141,13 @@
   --dwc-text-xl: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);
   --dwc-text-2xl: clamp(1.5rem, 1.3rem + 1vw, 2rem);
   --dwc-text-3xl: clamp(1.875rem, 1.5rem + 1.8vw, 2.75rem);
+  /* Verdict headline only. */
+  --dwc-text-4xl: clamp(2.25rem, 1.6rem + 2.6vw, 3.5rem);
+
+  /* Large type set at default tracking looks loose; small caps-y labels set
+     tight look cramped. Both directions are needed. */
+  --dwc-tracking-tight: -0.02em;
+  --dwc-tracking-wide: 0.06em;
 
   --dwc-leading-tight: 1.2;
   --dwc-leading-normal: 1.55;
@@ -122,18 +181,52 @@
      which otherwise reads as a grey haze. */
   --dwc-shadow-sm: 0 1px 2px 0 oklch(23% 0.012 250 / 0.06);
   --dwc-shadow: 0 1px 3px 0 oklch(23% 0.012 250 / 0.08), 0 1px 2px -1px oklch(23% 0.012 250 / 0.06);
-  --dwc-shadow-md: 0 4px 6px -1px oklch(23% 0.012 250 / 0.08), 0 2px 4px -2px oklch(23% 0.012 250 / 0.06);
-  --dwc-shadow-lg: 0 10px 15px -3px oklch(23% 0.012 250 / 0.1), 0 4px 6px -4px oklch(23% 0.012 250 / 0.07);
+  --dwc-shadow-md:
+    0 4px 6px -1px oklch(23% 0.012 250 / 0.08), 0 2px 4px -2px oklch(23% 0.012 250 / 0.06);
+  --dwc-shadow-lg:
+    0 10px 15px -3px oklch(23% 0.012 250 / 0.1), 0 4px 6px -4px oklch(23% 0.012 250 / 0.07);
+
+  /* Hairline light line along a surface's top edge. Applied as an inset shadow,
+     it is what makes a card read as a physical object catching light rather than
+     a rectangle that was drawn. Inverted in dark mode: a bright line there is a
+     faint sheen, not a highlight. */
+  --dwc-highlight: oklch(100% 0 0 / 0.8);
+  --dwc-ring-subtle: oklch(23% 0.012 250 / 0.05);
+  --dwc-shadow-xs: 0 1px 1px 0 oklch(23% 0.012 250 / 0.04);
+
+  /* Atmosphere. Both are *strengths*, not colours: components mix them with
+     whatever --tone-base is in scope, so one recipe serves every verdict colour
+     and adapts to the theme without duplicating a gradient per tone. */
+  --dwc-wash-strength: 9%;
+  --dwc-glow-strength: 14%;
 
   /* --- Motion. Short and purposeful; all of it disabled under
          prefers-reduced-motion at the bottom of this file. */
   --dwc-duration-fast: 120ms;
   --dwc-duration: 200ms;
   --dwc-duration-slow: 320ms;
+  --dwc-duration-slower: 620ms;
   --dwc-ease: cubic-bezier(0.32, 0.72, 0, 1);
+  /* Decelerating, for things entering the screen. */
+  --dwc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Slight overshoot, for direct manipulation only — never for text. */
+  --dwc-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Minimum comfortable touch target — mobile-first, applied everywhere. */
   --dwc-tap-target: 2.75rem;
+
+  /* Named so the shell stops hard-coding 20/25/30 and the ordering is auditable
+     in one place. Drawer must sit above the scrim, scrim above sticky content. */
+  --dwc-z-base: 0;
+  --dwc-z-sticky: 20;
+  --dwc-z-scrim: 25;
+  --dwc-z-drawer: 30;
+  --dwc-z-toast: 40;
+
+  /* The sticky header's height. Referenced by the header itself, by the sidebar's
+     sticky offset, and by its height calculation — three places that silently
+     drift apart when this is written as a literal in each. */
+  --dwc-header-height: 4rem;
 
   --dwc-sidebar-width: 19rem;
   --dwc-content-max: 56rem;
@@ -196,6 +289,16 @@
     --dwc-shadow: 0 1px 3px 0 oklch(0% 0 0 / 0.5), 0 1px 2px -1px oklch(0% 0 0 / 0.4);
     --dwc-shadow-md: 0 4px 6px -1px oklch(0% 0 0 / 0.5), 0 2px 4px -2px oklch(0% 0 0 / 0.4);
     --dwc-shadow-lg: 0 10px 15px -3px oklch(0% 0 0 / 0.6), 0 4px 6px -4px oklch(0% 0 0 / 0.5);
+    /* A bright hairline would read as a highlight on white but as a glaring edge
+       on a dark surface, so it drops to a faint sheen. */
+    --dwc-highlight: oklch(100% 0 0 / 0.06);
+    --dwc-ring-subtle: oklch(100% 0 0 / 0.04);
+    --dwc-shadow-xs: 0 1px 1px 0 oklch(0% 0 0 / 0.3);
+
+    /* Both stronger on dark: an identical mix percentage against a dark ground
+       is far less visible than against white. */
+    --dwc-wash-strength: 15%;
+    --dwc-glow-strength: 24%;
   }
 }
 
@@ -254,6 +357,16 @@
   --dwc-shadow: 0 1px 3px 0 oklch(0% 0 0 / 0.5), 0 1px 2px -1px oklch(0% 0 0 / 0.4);
   --dwc-shadow-md: 0 4px 6px -1px oklch(0% 0 0 / 0.5), 0 2px 4px -2px oklch(0% 0 0 / 0.4);
   --dwc-shadow-lg: 0 10px 15px -3px oklch(0% 0 0 / 0.6), 0 4px 6px -4px oklch(0% 0 0 / 0.5);
+  /* A bright hairline would read as a highlight on white but as a glaring edge
+     on a dark surface, so it drops to a faint sheen. */
+  --dwc-highlight: oklch(100% 0 0 / 0.06);
+  --dwc-ring-subtle: oklch(100% 0 0 / 0.04);
+  --dwc-shadow-xs: 0 1px 1px 0 oklch(0% 0 0 / 0.3);
+
+  /* Both stronger on dark: an identical mix percentage against a dark ground
+     is far less visible than against white. */
+  --dwc-wash-strength: 15%;
+  --dwc-glow-strength: 24%;
 }
 
 /* Respected globally rather than per-component, so no animation can escape it. */

@@ -1,9 +1,9 @@
-import { beforeEach, describe, expect, it } from 'vitest';
 import { analyse } from '@dwc/diagnostics';
 import { scenarios } from '@dwc/diagnostics/testing';
-import { openDatabase } from './sqlite.js';
-import { ImmutableReportError, type Repositories } from './repositories.js';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { LATEST_VERSION } from './migrations.js';
+import { ImmutableReportError, type Repositories } from './repositories.js';
+import { openDatabase } from './sqlite.js';
 
 let repos: Repositories & { migrated: string[] };
 

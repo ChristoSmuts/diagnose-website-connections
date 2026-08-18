@@ -1,9 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import Database from 'better-sqlite3';
-import { and, desc, eq, isNotNull, isNull, sql, type Column } from 'drizzle-orm';
-import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import type {
   Evidence,
   Report,
@@ -12,8 +9,10 @@ import type {
   SiteWithSummary,
   Verdict,
 } from '@dwc/contracts';
+import Database from 'better-sqlite3';
+import { and, desc, eq, isNotNull, isNull, sql, type Column } from 'drizzle-orm';
+import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from './migrations.js';
-import { reports, sites, type ReportRow, type SiteRow } from './schema.js';
 import {
   DuplicateSiteError,
   ImmutableReportError,
@@ -24,6 +23,7 @@ import {
   type SiteRepository,
   type UpdateSiteInput,
 } from './repositories.js';
+import { reports, sites, type ReportRow, type SiteRow } from './schema.js';
 
 export interface OpenOptions {
   /** File path, or ':memory:' for tests. */

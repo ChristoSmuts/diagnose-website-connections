@@ -1,6 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { sharedStyles } from '../styles/shared.js';
+import { formatMs } from '../utils/format.js';
 
 export interface WaterfallPhase {
   label: string;
@@ -120,7 +121,7 @@ export class DwcWaterfall extends LitElement {
 
       <div class="total" aria-hidden="true">
         <span>Total</span>
-        <span>${Math.round(total)}ms</span>
+        <span>${formatMs(total)}</span>
       </div>
 
       ${this.renderAccessibleTable(total)}
@@ -134,11 +135,13 @@ export class DwcWaterfall extends LitElement {
       <li class="phase" style="--tone: var(--dwc-${phase.tone})">
         <span class="name">${phase.label}</span>
         <span class="time ${phase.durationMs === null ? 'absent' : ''}">
-          ${phase.durationMs === null ? 'not measured' : `${String(Math.round(phase.durationMs))}ms`}
+          ${phase.durationMs === null ? 'not measured' : formatMs(phase.durationMs)}
         </span>
-        ${phase.durationMs === null
-          ? nothing
-          : html`<div class="track"><div class="fill" style="width: ${width}%"></div></div>`}
+        ${
+          phase.durationMs === null
+            ? nothing
+            : html`<div class="track"><div class="fill" style="width: ${width}%"></div></div>`
+        }
         <p class="description">${phase.description}</p>
       </li>
     `;
@@ -169,9 +172,11 @@ export class DwcWaterfall extends LitElement {
               <tr>
                 <th scope="row">${phase.label}</th>
                 <td>
-                  ${phase.durationMs === null
-                    ? 'not measured'
-                    : `${String(Math.round(phase.durationMs))} milliseconds`}
+                  ${
+                    phase.durationMs === null
+                      ? 'not measured'
+                      : `${String(Math.round(phase.durationMs))} milliseconds`
+                  }
                 </td>
                 <td>${phase.description}</td>
               </tr>

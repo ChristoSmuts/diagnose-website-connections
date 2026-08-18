@@ -99,12 +99,14 @@ describe('URL normalisation', () => {
     expect(normalizeUrl('https://example.com/page#section').normalizedUrl).not.toContain('#');
   });
 
-  it.each(['file:///etc/passwd', 'gopher://example.com', 'ftp://example.com', 'javascript:alert(1)'])(
-    'rejects the non-http scheme %s',
-    (input) => {
-      expect(() => normalizeUrl(input)).toThrow(InvalidUrlError);
-    },
-  );
+  it.each([
+    'file:///etc/passwd',
+    'gopher://example.com',
+    'ftp://example.com',
+    'javascript:alert(1)',
+  ])('rejects the non-http scheme %s', (input) => {
+    expect(() => normalizeUrl(input)).toThrow(InvalidUrlError);
+  });
 
   it('rejects empty input with something a user can act on', () => {
     expect(() => normalizeUrl('   ')).toThrow(/enter a website address/i);
@@ -112,7 +114,9 @@ describe('URL normalisation', () => {
 
   it('blocks a literal private IP typed directly', () => {
     expect(() => normalizeUrl('http://127.0.0.1:8080')).toThrow(BlockedTargetError);
-    expect(() => normalizeUrl('http://169.254.169.254/latest/meta-data/')).toThrow(BlockedTargetError);
+    expect(() => normalizeUrl('http://169.254.169.254/latest/meta-data/')).toThrow(
+      BlockedTargetError,
+    );
     expect(() => normalizeUrl('http://[::1]:3000')).toThrow(BlockedTargetError);
   });
 

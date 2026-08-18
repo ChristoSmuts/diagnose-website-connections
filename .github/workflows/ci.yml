@@ -10,14 +10,13 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Fast feedback: everything that needs no browser and no network.
   verify:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
       - uses: actions/setup-node@v4
         with:
           # Pinned to the same major as .nvmrc. Local and CI drifting apart is a
@@ -27,8 +26,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # Deployment is gated on all of these. Types and lint first because they
-      # fail fastest and their errors are the easiest to act on.
+      # Ordered fastest-failing first, and each one is a real gate.
+      - name: Formatting
+        run: pnpm run format:check
+
+      - name: Lint
+        run: pnpm run lint
+
       - name: Typecheck
         run: pnpm run typecheck
 
@@ -43,7 +47,6 @@ jobs:
       # environment-specific breakage that fixtures never would.
       - name: Smoke test the probe engine against a live site
         run: node apps/api/src/cli/probe.ts example.com --json > /tmp/probe.json
-        working-directory: .
 
       - name: Assert the smoke test produced a usable verdict
         run: |
@@ -51,8 +54,73 @@ jobs:
             const r = require('/tmp/probe.json');
             if (r.verdict.culprit === 'unreachable') throw new Error('probe could not reach the target');
             if (typeof r.verdict.score !== 'number') throw new Error('no score produced');
-            console.log('verdict:', r.verdict.culprit, r.verdict.score + '/100');
+            if (!Array.isArray(r.verdict.checks) || r.verdict.checks.length < 10) {
+              throw new Error('expected a full set of checks, got ' + (r.verdict.checks || []).length);
+            }
+            console.log('verdict:', r.verdict.culprit, r.verdict.score + '/100,', r.verdict.checks.length, 'checks');
           "
+
+  # Browser-driven gates. Split from `verify` so a lint failure does not cost the
+  # time it takes to install browsers and run real diagnostics.
+  e2e:
+    runs-on: ubuntu-latest
+    needs: verify
+
+    # The official image pins the browsers *and* the font rendering, which is what
+    # makes committed visual baselines reproducible. Baselines are Linux-only for
+    # exactly this reason — see e2e/playwright.config.ts.
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The API serves the built app, so there is nothing to test without this.
+      - name: Build
+        run: pnpm run build
+
+      - name: End-to-end, accessibility and visual regression
+        run: pnpm --filter @dwc/e2e run e2e
+        env:
+          CI: 'true'
+
+      - name: Upload traces, screenshots and visual diffs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  container:
+    runs-on: ubuntu-latest
+    needs: verify
+
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Verify the container builds
         run: docker build -t dwc/diagnostics:ci .
+
+      # A container that builds but cannot answer is not a passing build.
+      - name: Verify it starts and serves the app
+        run: |
+          docker run -d --name dwc -p 8787:8787 dwc/diagnostics:ci
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8787/api/health > /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS http://127.0.0.1:8787/api/health
+          # Same-origin serving of the built app is load-bearing for the latency
+          # baseline, so assert the SPA is actually served rather than 404ing.
+          curl -fsS http://127.0.0.1:8787/ | grep -q '<dwc-app>'
+          docker rm -f dwc

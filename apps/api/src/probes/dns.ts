@@ -102,7 +102,9 @@ export async function probeDns(
     .map((a) => a.ttl)
     .filter((t): t is number => t !== null && t > 0);
 
-  const medianLookup = median(successful.map((a) => a.durationMs.value).filter((v): v is number => v !== null));
+  const medianLookup = median(
+    successful.map((a) => a.durationMs.value).filter((v): v is number => v !== null),
+  );
 
   return {
     records,
@@ -143,9 +145,11 @@ async function collectRecords(resolver: Resolver, host: string): Promise<DnsReco
   for (const entry of v6) records.push({ type: 'AAAA', value: entry.address, ttl: entry.ttl });
   for (const value of cname) records.push({ type: 'CNAME', value, ttl: null });
   for (const value of ns) records.push({ type: 'NS', value, ttl: null });
-  for (const entry of mx) records.push({ type: 'MX', value: `${entry.priority} ${entry.exchange}`, ttl: null });
+  for (const entry of mx)
+    records.push({ type: 'MX', value: `${entry.priority} ${entry.exchange}`, ttl: null });
   for (const entry of txt) records.push({ type: 'TXT', value: entry.join(''), ttl: null });
-  if (soa !== null) records.push({ type: 'SOA', value: `${soa.nsname} ${soa.hostmaster}`, ttl: soa.minttl });
+  if (soa !== null)
+    records.push({ type: 'SOA', value: `${soa.nsname} ${soa.hostmaster}`, ttl: soa.minttl });
   for (const entry of caa) {
     const value = Object.entries(entry)
       .map(([k, v]) => `${k}=${String(v)}`)

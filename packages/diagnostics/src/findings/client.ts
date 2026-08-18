@@ -1,6 +1,6 @@
 import type { ClientEvidence, Evidence, Finding } from '@dwc/contracts';
-import { LOCAL_CONTROL_RTT_MS, THRESHOLDS, classify, classifyInverted } from '../thresholds.js';
 import { lossRatio } from '../stats.js';
+import { LOCAL_CONTROL_RTT_MS, THRESHOLDS, classify, classifyInverted } from '../thresholds.js';
 import { finding, ms } from './helpers.js';
 
 /**
@@ -28,7 +28,7 @@ export function detectClientFindings(client: ClientEvidence | null): Finding[] {
         severity: rttBand === 'bad' ? 'major' : 'minor',
         owner: 'you',
         title: 'Your connection is slow to respond',
-        plain: `A small request from your device to our test server took ${ms(rtt)} to come back. On a healthy connection this is usually under ${THRESHOLDS.clientRttMs.ok}ms.`,
+        plain: `A small request from your device to our test server took ${ms(rtt)} to come back. On a healthy connection this is usually under ${THRESHOLDS.clientRttMs.ok} ms.`,
         impact:
           'This delay applies to every website you visit, not just this one. It makes browsing feel sluggish even when sites themselves are fast.',
         technical: `Median round-trip time to the control endpoint was ${ms(rtt)} over ${client.control.count} samples.`,
@@ -93,7 +93,10 @@ export function detectClientFindings(client: ClientEvidence | null): Finding[] {
           'Lost data has to be sent again, which causes sudden stalls and is far more damaging to browsing than a merely slow connection.',
         technical: `${client.control.failed} of ${client.control.count + client.control.failed} probes failed or timed out.`,
         evidence: [
-          { label: 'Failed requests', value: `${client.control.failed} of ${client.control.count + client.control.failed}` },
+          {
+            label: 'Failed requests',
+            value: `${client.control.failed} of ${client.control.count + client.control.failed}`,
+          },
         ],
         remediation: {
           summary: 'Packet loss almost always means faulty hardware or a weak signal.',
@@ -121,7 +124,13 @@ export function detectClientFindings(client: ClientEvidence | null): Finding[] {
           plain: `Your download speed measured about ${(down / 125_000).toFixed(1)} Mbps.`,
           impact: 'Large pages, images and video take proportionally longer to arrive.',
           technical: `Measured ${(down / 1_000_000).toFixed(2)} MB/s downstream. Short in-browser tests understate fast links, so treat this as a floor rather than an exact figure.`,
-          evidence: [{ label: 'Download speed', value: `${(down / 125_000).toFixed(1)} Mbps`, provenance: 'measured' }],
+          evidence: [
+            {
+              label: 'Download speed',
+              value: `${(down / 125_000).toFixed(1)} Mbps`,
+              provenance: 'measured',
+            },
+          ],
           remediation: {
             summary: 'Confirm with a dedicated speed test before acting.',
             steps: [

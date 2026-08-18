@@ -12,23 +12,34 @@ const DEFINITIONS: Record<string, string> = {
   TTFB: 'Time to first byte — how long the server takes to start sending a page after being asked for it. It measures the server thinking, not the network.',
   TLS: 'The encryption that puts the padlock in your browser’s address bar and the S in HTTPS.',
   TCP: 'The basic method computers use to open a connection to each other before any data is exchanged.',
-  'Round trip': 'How long it takes a small message to reach a server and come back. The single best measure of how responsive a connection feels.',
-  Jitter: 'How much the round-trip time varies from moment to moment. Steady is better than fast-but-erratic.',
-  'Packet loss': 'Data that never arrives and has to be sent again. Causes sudden stalls and hurts far more than plain slowness.',
+  'Round trip':
+    'How long it takes a small message to reach a server and come back. The single best measure of how responsive a connection feels.',
+  Jitter:
+    'How much the round-trip time varies from moment to moment. Steady is better than fast-but-erratic.',
+  'Packet loss':
+    'Data that never arrives and has to be sent again. Causes sudden stalls and hurts far more than plain slowness.',
   CDN: 'A content delivery network — copies of a site kept in many places worldwide so visitors connect to one nearby.',
-  'HTTP/2': 'A newer way of transferring pages that fetches many files at once over a single connection.',
-  'HTTP/3': 'The newest transfer protocol. It copes better with unreliable connections, such as mobile.',
-  Compression: 'Shrinking text before sending it. Typically cuts the amount transferred by around 70%.',
+  'HTTP/2':
+    'A newer way of transferring pages that fetches many files at once over a single connection.',
+  'HTTP/3':
+    'The newest transfer protocol. It copes better with unreliable connections, such as mobile.',
+  Compression:
+    'Shrinking text before sending it. Typically cuts the amount transferred by around 70%.',
   Certificate: 'The digital document proving a website is genuinely who it claims to be.',
-  'OCSP stapling': 'The server proving up front that its certificate has not been revoked, saving the browser a separate check.',
-  'Session resumption': 'Letting a returning visitor skip most of the encryption setup they already completed earlier.',
+  'OCSP stapling':
+    'The server proving up front that its certificate has not been revoked, saving the browser a separate check.',
+  'Session resumption':
+    'Letting a returning visitor skip most of the encryption setup they already completed earlier.',
   ALPN: 'The negotiation during connection setup where browser and server agree which version of HTTP to speak.',
   TTL: 'How long browsers may remember an address before looking it up again.',
   ASN: 'The identifier for the network operator a server sits on — useful for telling a hosting provider from a CDN.',
   IPv6: 'The modern style of internet address, gradually replacing the older IPv4 as those addresses run out.',
-  Anycast: 'One address served from many locations at once, so traffic reaches whichever is closest.',
-  'Median': 'The middle value of all our samples. Used instead of an average because one unusually slow request would distort an average.',
-  'Percentile': 'The 95th percentile is the level below which 95% of samples fell — it describes the bad-but-not-freak cases.',
+  Anycast:
+    'One address served from many locations at once, so traffic reaches whichever is closest.',
+  Median:
+    'The middle value of all our samples. Used instead of an average because one unusually slow request would distort an average.',
+  Percentile:
+    'The 95th percentile is the level below which 95% of samples fell — it describes the bad-but-not-freak cases.',
 };
 
 /** Terms each finding relies on, so the glossary shows only what is relevant. */

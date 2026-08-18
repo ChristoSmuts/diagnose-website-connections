@@ -1,4 +1,7 @@
 {
   "extends": "./tsconfig.json",
+  // No Node types in the emitted library: tests are excluded here, so any
+  // accidental Node import in component code fails this build.
+  "compilerOptions": { "types": [] },
   "exclude": ["src/**/*.test.ts"]
 }

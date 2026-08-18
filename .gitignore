@@ -31,4 +31,11 @@ Thumbs.db
 
 # Generated Tailwind sheet for the shadow-DOM component library
 packages/ui/src/styles/generated.ts
+# Phosphor path data, extracted at build time from icons.manifest.json.
+packages/ui/src/icons/generated.ts
 packages/ui/.tmp/
+
+# Transient Playwright + MCP artefacts.
+.playwright-mcp/
+e2e/test-results/
+e2e/playwright-report/

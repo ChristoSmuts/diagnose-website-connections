@@ -1,6 +1,6 @@
 {
   "name": "diagnose-website-connections",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Diagnose a website's connection and attribute problems to the server, your internet connection, or the network path between them.",
@@ -14,11 +14,25 @@
     "dev": "turbo run dev",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint",
-    "verify": "turbo run typecheck lint test build"
+    "//lint": "One ESLint pass from the root, not a Turbo task: the config is a single flat config covering the whole workspace, and no package defines its own lint script.",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "verify": "pnpm run format:check && pnpm run lint && turbo run typecheck test build"
   },
+  "//typescript": "Pinned to 5.x ONLY so typescript-eslint can parse. TypeScript 7 is the native compiler and ships no legacy JS API, so the linter cannot use it. Every workspace package builds with typescript@catalog: (7.x) via Turbo. Do not change this to catalog: — linting stops working. See eslint.config.js.",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import-x": "^4.17.1",
+    "eslint-plugin-lit": "^2.3.1",
+    "eslint-plugin-playwright": "^2.11.0",
+    "eslint-plugin-wc": "^3.1.0",
+    "prettier": "^3.9.6",
     "turbo": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.67.0"
   }
 }

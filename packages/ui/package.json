@@ -13,14 +13,18 @@
     },
     "./tokens.css": "./node_modules/@dwc/tokens/src/tokens.css"
   },
-  "files": ["dist", "custom-elements.json"],
+  "files": [
+    "dist",
+    "custom-elements.json"
+  ],
   "customElements": "custom-elements.json",
   "scripts": {
     "build:styles": "node scripts/build-styles.mjs",
     "build:manifest": "cem analyze --litelement --globs \"src/**/*.ts\" --exclude \"src/**/*.test.ts\" --outdir .",
-    "build": "pnpm run build:styles && tsc -p tsconfig.build.json && pnpm run build:manifest",
-    "typecheck": "pnpm run build:styles && tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "build": "pnpm run build:styles && pnpm run build:icons && tsc -p tsconfig.build.json && pnpm run build:manifest",
+    "typecheck": "pnpm run build:styles && pnpm run build:icons && tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "build:icons": "node scripts/build-icons.mjs"
   },
   "dependencies": {
     "@dwc/contracts": "workspace:*",
@@ -29,7 +33,9 @@
   },
   "devDependencies": {
     "@custom-elements-manifest/analyzer": "^0.11.0",
+    "@phosphor-icons/core": "^2.1.1",
     "@tailwindcss/cli": "catalog:",
+    "@types/node": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

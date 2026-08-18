@@ -14,14 +14,14 @@ has no visibility into DNS, TCP or TLS. Any browser-only tool is guessing.
 
 Real attribution needs a **differential across three vantage points**:
 
-| | Vantage | What it establishes |
-|---|---|---|
-| **S** | Our server → the target | How the site behaves for a neutral, well-connected observer |
-| **K** | Your browser → our own endpoint | How your connection behaves, independent of the target |
-| **T** | Your browser → the target | What you actually experience |
+|       | Vantage                         | What it establishes                                         |
+| ----- | ------------------------------- | ----------------------------------------------------------- |
+| **S** | Our server → the target         | How the site behaves for a neutral, well-connected observer |
+| **K** | Your browser → our own endpoint | How your connection behaves, independent of the target      |
+| **T** | Your browser → the target       | What you actually experience                                |
 
 Comparing the three is what turns "the site feels slow" into an answer somebody can act on. If the
-site is slow from *our* server too, it is slow for everyone. If our own endpoint is equally slow for
+site is slow from _our_ server too, it is slow for everyone. If our own endpoint is equally slow for
 you, it is your link. If both are healthy and only your route to the site is not, it is the path.
 
 ## Quick start
@@ -73,9 +73,14 @@ the target itself.
 
 Three layers, so it works for whoever is looking at it:
 
-1. **The verdict** — one sentence, no jargon, plus who owns the problem. Most people can stop here.
+1. **The verdict** — one sentence, plus who owns the problem. Most people can stop here.
 2. **Findings** — ranked worst-first, in ordinary words, each naming who can fix it.
-3. **Technical detail** — raw evidence and copyable remediation, one click away per finding.
+3. **Every check we ran** — all ~30 checks including the ones that passed, grouped by stage of the
+   request, each expanding to a full technical explanation and its evidence.
+
+Findings describe problems; checks describe everything examined. That distinction matters: a healthy
+site produces no findings, and without checks there would be nothing to inspect — which is backwards
+for a diagnostics tool.
 
 ### Honesty rules the engine enforces
 
@@ -85,24 +90,26 @@ These are structural, not conventions:
   "your connection" or "the path" — and it won't.
 - **Loopback is not a connection.** When self-hosted on your own machine, the control endpoint
   answers in ~3ms over loopback. That says nothing about your internet, so both client-side vantages
-  report *not measured* rather than a flattering "healthy".
+  report _not measured_ rather than a flattering "healthy".
 - **Measured vs inferred** is carried on every value, so a derived number can never be rendered as an
   observed one.
 - **"Inconclusive" is a valid answer.** Admitting ignorance beats inventing a culprit.
+- **"Not run" and "could not tell" are different facts** and never share a state.
+- **Prose never contradicts the tile beside it.** Enforced by tests, after it shipped twice.
 
 ## Configuration
 
 Everything has a working default; nothing is required.
 
-| Variable | Default | Notes |
-|---|---|---|
-| `PORT` | `8787` | |
-| `AUTH_MODE` | `none` | `none` \| `password` \| `multiuser` |
-| `AUTH_PASSWORD` | — | Required when `AUTH_MODE=password` |
-| `DATABASE_PATH` | `./data/dwc.db` | One file. Backup = copy it. |
-| `DNS_RESOLVERS` | `1.1.1.1,8.8.8.8,9.9.9.9` | Explicit, never the host's resolver |
-| `STABILITY_SAMPLES` | `5` | Below 5, variance is treated as noise |
-| `RATE_LIMIT_PER_MINUTE` | `20` | Per client IP |
+| Variable                | Default                   | Notes                                 |
+| ----------------------- | ------------------------- | ------------------------------------- |
+| `PORT`                  | `8787`                    |                                       |
+| `AUTH_MODE`             | `none`                    | `none` \| `password` \| `multiuser`   |
+| `AUTH_PASSWORD`         | —                         | Required when `AUTH_MODE=password`    |
+| `DATABASE_PATH`         | `./data/dwc.db`           | One file. Backup = copy it.           |
+| `DNS_RESOLVERS`         | `1.1.1.1,8.8.8.8,9.9.9.9` | Explicit, never the host's resolver   |
+| `STABILITY_SAMPLES`     | `5`                       | Below 5, variance is treated as noise |
+| `RATE_LIMIT_PER_MINUTE` | `20`                      | Per client IP                         |
 
 ## Security
 
@@ -125,8 +132,9 @@ packages/
   contracts/    zod schemas and types shared by both sides
   diagnostics/  the attribution engine — pure, no I/O, no clock, no network
   persistence/  repository interfaces + SQLite adapter
-  tokens/       design tokens (OKLCH) as CSS custom properties
+  tokens/       design tokens (OKLCH) as CSS custom properties, plus vendored fonts
   ui/           Lit component library (shadow DOM, themeable, drop-in)
+e2e/            Playwright: journeys, accessibility, visual regression
 ```
 
 `diagnostics` is deliberately separate from `api`: the reasoning is pure and deterministic, so the
@@ -139,7 +147,10 @@ verdict logic is tested against fixtures rather than against the live internet.
   syntax. `@dwc/ui` is unaffected — `tsc` compiles it ahead of time.
 - **`@dwc/ui` compiles Tailwind into a single shared stylesheet** (`scripts/build-styles.mjs`) that
   every shadow root adopts by reference. Components keep real encapsulation; tokens cross the
-  boundary as CSS custom properties.
+  boundary as CSS custom properties. Icons are generated the same way, from a committed manifest.
+- **The repo root pins TypeScript 5.x for the linter only**, while every package builds with 7.x.
+  TypeScript 7 is the native compiler and ships no JavaScript API, so typescript-eslint cannot parse
+  with it.
 
 ## Development
 
@@ -147,9 +158,32 @@ verdict logic is tested against fixtures rather than against the live internet.
 pnpm run dev         # api + web with reload
 pnpm run test        # every package
 pnpm run typecheck
-pnpm run verify      # typecheck + lint + test + build, as CI runs it
+pnpm run lint        # one ESLint pass across the workspace
+pnpm run format      # prettier --write .
+pnpm run verify      # format + lint + typecheck + test + build, as CI runs it
+
+pnpm --filter @dwc/e2e run e2e    # Playwright: journeys, a11y, visual regression
 ```
+
+The E2E suite needs a build first (`pnpm run build`), because the API serves the built app.
+
+**Visual baselines are Linux-only.** Font rasterisation differs by platform, so snapshots are
+generated and compared inside the official Playwright container; elsewhere those specs skip
+themselves.
+
+See [CLAUDE.md](CLAUDE.md) for the constraints that are not obvious from the code, and
+[CONTRIBUTING.md](CONTRIBUTING.md) to make a change.
+
+## Documentation
+
+|                                    |                                                                              |
+| ---------------------------------- | ---------------------------------------------------------------------------- |
+| [CLAUDE.md](CLAUDE.md)             | Architecture, the honesty invariants, and the constraints that will bite you |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, the verify gate, how to add a finding, a check, or an icon            |
+| [VERSIONING.md](VERSIONING.md)     | The three separate version numbers and what each one means                   |
+| [SECURITY.md](SECURITY.md)         | Threat model, the SSRF defences, and how to report an issue                  |
+| [CHANGELOG.md](CHANGELOG.md)       | What changed, including what is deliberately not done yet                    |
 
 ## Licence
 
-MIT.
+MIT — see [LICENSE](LICENSE), which also lists the bundled fonts and icons and their licences.

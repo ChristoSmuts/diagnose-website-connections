@@ -12,9 +12,10 @@
 
 export { DwcBadge } from './components/dwc-badge.js';
 export { DwcButton, type ButtonVariant } from './components/dwc-button.js';
+export { DwcCheckRow } from './components/dwc-check-row.js';
 export { DwcDialog } from './components/dwc-dialog.js';
 export { DwcFindingCard } from './components/dwc-finding-card.js';
-export { DwcIcon, type IconName } from './components/dwc-icon.js';
+export { DwcIcon, type IconName, type IconWeight } from './components/dwc-icon.js';
 export { DwcNavTree } from './components/dwc-nav-tree.js';
 export { DwcProgressSteps, type ProgressStep } from './components/dwc-progress-steps.js';
 export { DwcScoreDial } from './components/dwc-score-dial.js';
@@ -24,5 +25,5 @@ export { DwcVantageTile } from './components/dwc-vantage-tile.js';
 export { DwcVerdictBanner } from './components/dwc-verdict-banner.js';
 export { DwcWaterfall, type WaterfallPhase } from './components/dwc-waterfall.js';
 
-export { sharedStyles, tailwindSheet, baseSheet } from './styles/shared.js';
+export { sharedStyles, tailwindSheet, baseSheet, surfaceSheet } from './styles/shared.js';
 export { formatWhen, formatBytes } from './utils/format.js';

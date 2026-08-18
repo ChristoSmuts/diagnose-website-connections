@@ -21,7 +21,7 @@ export function withTimeout<T>(promise: Promise<T>, ms: number, label: string): 
 
   return Promise.race([promise, timeout]).finally(() => {
     if (timer !== undefined) clearTimeout(timer);
-  }) as Promise<T>;
+  });
 }
 
 /** Narrow an unknown catch value to a readable message. */

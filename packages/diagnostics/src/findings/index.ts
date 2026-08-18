@@ -1,4 +1,6 @@
 import type { Evidence, Finding } from '@dwc/contracts';
+import { detectClientFindings, detectPathFindings } from './client.js';
+import { rankFindings } from './helpers.js';
 import {
   detectConnectivityFindings,
   detectDnsFindings,
@@ -6,8 +8,6 @@ import {
   detectStabilityFindings,
   detectTlsFindings,
 } from './server.js';
-import { detectClientFindings, detectPathFindings } from './client.js';
-import { rankFindings } from './helpers.js';
 
 export * from './helpers.js';
 

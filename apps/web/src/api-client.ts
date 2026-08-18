@@ -27,10 +27,22 @@ export class ApiError extends Error {
 }
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'content-type': 'application/json', ...init?.headers },
-  });
+  /*
+   * Only declare a JSON content type when there is actually a body.
+   *
+   * Fastify rejects a request that announces `application/json` and then sends
+   * nothing, with "Body cannot be empty when content-type is set" — a 400. Several
+   * endpoints here are deliberately bodyless (archive, restore, delete), and
+   * setting the header unconditionally broke every one of them from the browser
+   * while curl, which sends no content-type, kept working. That combination is
+   * why it survived: the API was fine, the client was not.
+   */
+  const headers: Record<string, string> = {
+    ...(init?.body === undefined ? {} : { 'content-type': 'application/json' }),
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+
+  const response = await fetch(path, { ...init, headers });
 
   if (response.status === 204) return undefined as T;
 
@@ -79,8 +91,10 @@ export const api = {
     ),
 
   getReport: (id: string) => json<{ report: Report }>(`/api/reports/${id}`).then((r) => r.report),
-  archiveReport: (id: string) => json<{ ok: true }>(`/api/reports/${id}/archive`, { method: 'POST' }),
-  restoreReport: (id: string) => json<{ ok: true }>(`/api/reports/${id}/restore`, { method: 'POST' }),
+  archiveReport: (id: string) =>
+    json<{ ok: true }>(`/api/reports/${id}/archive`, { method: 'POST' }),
+  restoreReport: (id: string) =>
+    json<{ ok: true }>(`/api/reports/${id}/restore`, { method: 'POST' }),
   deleteReport: (id: string) => json<void>(`/api/reports/${id}`, { method: 'DELETE' }),
 
   submitClientEvidence: (reportId: string, client: ClientEvidence) =>
@@ -107,7 +121,10 @@ export async function* streamDiagnostic(
   const response = await fetch('/api/diagnose', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ url, ...(options.siteId === undefined ? {} : { siteId: options.siteId }) }),
+    body: JSON.stringify({
+      url,
+      ...(options.siteId === undefined ? {} : { siteId: options.siteId }),
+    }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   });
 

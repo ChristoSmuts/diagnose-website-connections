@@ -1,6 +1,6 @@
+import type { Culprit, ReportSummary, SiteWithSummary } from '@dwc/contracts';
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { Culprit, ReportSummary, SiteWithSummary } from '@dwc/contracts';
 import { sharedStyles } from '../styles/shared.js';
 import { formatWhen } from '../utils/format.js';
 import './dwc-icon.js';
@@ -259,11 +259,7 @@ export class DwcNavTree extends LitElement {
             type="button"
             @click=${() => this.emit('site-select', { siteId: site.id })}
           >
-            <span
-              class="status-dot"
-              style="--dot: ${dot}"
-              aria-hidden="true"
-            ></span>
+            <span class="status-dot" style="--dot: ${dot}" aria-hidden="true"></span>
             <span class="name">${site.label}</span>
             <span class="count">${site.reportCount}</span>
           </button>
@@ -291,9 +287,9 @@ export class DwcNavTree extends LitElement {
               class="action"
               type="button"
               title=${site.archivedAt === null ? `Archive ${site.label}` : `Restore ${site.label}`}
-              aria-label=${site.archivedAt === null
-                ? `Archive ${site.label}`
-                : `Restore ${site.label}`}
+              aria-label=${
+                site.archivedAt === null ? `Archive ${site.label}` : `Restore ${site.label}`
+              }
               @click=${() =>
                 this.emit(site.archivedAt === null ? 'site-archive' : 'site-restore', {
                   siteId: site.id,
@@ -313,15 +309,21 @@ export class DwcNavTree extends LitElement {
           </span>
         </div>
 
-        ${isExpanded
-          ? html`
-              <ul class="reports" role="group">
-                ${reports.length === 0
-                  ? html`<li class="empty" style="padding: var(--dwc-space-2)">No reports yet</li>`
-                  : reports.map((report) => this.renderReport(report))}
-              </ul>
-            `
-          : nothing}
+        ${
+          isExpanded
+            ? html`
+                <ul class="reports" role="group">
+                  ${
+                    reports.length === 0
+                      ? html`<li class="empty" style="padding: var(--dwc-space-2)">
+                          No reports yet
+                        </li>`
+                      : reports.map((report) => this.renderReport(report))
+                  }
+                </ul>
+              `
+            : nothing
+        }
       </li>
     `;
   }
