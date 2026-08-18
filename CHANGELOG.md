@@ -81,7 +81,7 @@ and fixes a status indicator that was never round.
   7 px circle inside a 1.5px ring lands every edge on a half pixel and renders lopsided regardless.
 - **The CLI printed `73ms`.** It defined its own duration formatter instead of using the engine's, and so
   broke the spaced-unit rule the rest of the report follows — the same fault as the progress messages, for
-  the same reason: copy tests only ever see strings the engine produced.
+  the same reason: copy tests only ever see strings the engine produced. It now has a source-scanning test of its own, so the fault has nowhere left to reappear.
 - A finding began "Simply opening a connection…", which the banned-register test would have caught years
   ago had any fixture produced a slow enough connection to trigger it. One does now.
 
