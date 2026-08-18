@@ -34,7 +34,12 @@ COPY . .
 RUN pnpm run build
 
 # Drop dev dependencies from the tree we are about to copy forward.
-RUN pnpm prune --prod
+#
+# CI=true is load-bearing rather than decoration. `prune` deletes and relinks the
+# whole modules directory, and pnpm refuses to do that unprompted when there is
+# no TTY to confirm on — which a Docker build never has. Without it the build
+# fails at this exact line with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY.
+RUN CI=true pnpm prune --prod
 
 # ---------------------------------------------------------------------------
 # Runtime stage

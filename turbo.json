@@ -6,6 +6,13 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "custom-elements.json"]
     },
+    // Node 24 strips types natively, so the API has nothing to compile and its
+    // "build" is a typecheck gate that emits no files. Without this override Turbo
+    // warns about missing outputs on every single build.
+    "@dwc/api#build": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "typecheck": {
       "dependsOn": ["^build"],
       "outputs": []

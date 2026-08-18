@@ -17,6 +17,10 @@ import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+// The app version lives in the root manifest (see VERSIONING.md). Reading it here
+// rather than repeating the literal is what stops /api/health quietly reporting a
+// version the deployment stopped being months ago — it had already drifted once.
+import rootManifest from '../../../package.json' with { type: 'json' };
 import type { Config } from './config.ts';
 import { resolvePrincipal, expectedToken } from './principal.ts';
 import { runServerProbe } from './probes/run.ts';
@@ -89,7 +93,7 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
 
   app.get('/api/health', () => ({
     status: 'ok' as const,
-    version: '0.1.0',
+    version: rootManifest.version,
     authMode: config.authMode,
   }));
 

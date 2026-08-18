@@ -3,6 +3,28 @@
 Notable changes to the application. Package-level changes are tracked by Changesets in each
 package's own changelog. See [VERSIONING.md](VERSIONING.md) for what each version number means.
 
+## [Unreleased]
+
+### Fixed
+
+- **The container could not be built at all.** `pnpm prune --prod` refuses to delete and relink the
+  modules directory without a TTY to confirm on, which a Docker build never has, so
+  `docker compose up --build` died on the last build step with
+  `ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY`.
+- **`/api/health` reported a hardcoded `0.1.0`** while the app was on 0.2.0. It now reads the root
+  manifest, which [VERSIONING.md](VERSIONING.md) already names as the app version.
+- **Two copy faults in the live progress messages** — `Found 4 address(es)` and `Connected in 15ms`.
+  Both break rules the report itself follows, and both were invisible to the copy tests, which only
+  ever see strings the engine produces. Found by watching a real run in the container.
+
+### Added
+
+- The API's progress messages are now guarded by their own source-scanning copy test, and share the
+  `ms()` and `plural()` helpers with the engine rather than formatting by hand.
+- The server logs the signal that stopped it. A process that vanishes with exit code 0 and no
+  explanation is indistinguishable from a crash, an OOM kill, or an orchestrator restart from the
+  outside — which cost real time to diagnose.
+
 ## [0.2.0] — 2026-08-17
 
 Engine `1.1.0`. Adds a full checks layer, rebuilds the visual design, and makes the quality gates real.

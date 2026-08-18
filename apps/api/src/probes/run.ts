@@ -1,4 +1,5 @@
 import type { DiagnosticEvent, ProbePhase, ServerEvidence } from '@dwc/contracts';
+import { ms, plural } from '@dwc/diagnostics';
 import type { Config } from '../config.ts';
 import { normalizeUrl, resolveSafely } from '../safety/ssrf.ts';
 import { probeAsn } from './asn.ts';
@@ -78,7 +79,7 @@ export async function runServerProbe(
     ]);
     base.dns = dns;
     resolved = safe;
-    report('dns', 'complete', `Found ${resolved.addresses.length} address(es)`);
+    report('dns', 'complete', `Found ${plural(resolved.addresses.length, 'address', 'addresses')}`);
   } catch (error) {
     report('dns', 'failed', 'The address could not be looked up');
     return { ...base, fatalError: `DNS lookup failed — ${errorMessage(error)}` };
@@ -105,7 +106,7 @@ export async function runServerProbe(
       fatalError: 'We found the address but every connection attempt was refused or timed out.',
     };
   }
-  report('tcp', 'complete', `Connected in ${Math.round(reachable.tcpConnectMs.value ?? 0)}ms`);
+  report('tcp', 'complete', `Connected in ${ms(reachable.tcpConnectMs.value ?? 0)}`);
 
   // --- TLS ------------------------------------------------------------------
   if (target.scheme === 'https') {
