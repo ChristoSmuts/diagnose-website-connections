@@ -36,6 +36,9 @@ export function probeTcp(
         reachable: true,
         tcpConnectMs: measured(elapsed(), 'ms'),
         error: null,
+        // Filled in by the orchestrator once it knows which addresses answered.
+        ptr: null,
+        network: null,
       });
     });
 
@@ -46,6 +49,8 @@ export function probeTcp(
         reachable: false,
         tcpConnectMs: unavailable('ms', 'the connection attempt timed out'),
         error: `ETIMEDOUT after ${timeoutMs}ms`,
+        ptr: null,
+        network: null,
       });
     });
 
@@ -56,6 +61,8 @@ export function probeTcp(
         reachable: false,
         tcpConnectMs: unavailable('ms', 'the connection was refused or failed'),
         error: errorMessage(error),
+        ptr: null,
+        network: null,
       });
     });
   });
@@ -279,6 +286,9 @@ function buildCertificate(peer: PeerCertificate, host: string): Certificate | nu
     hostnameMatches: matchesHost(host, altNames, peer.subject?.CN),
     chainLength: countChain(peer),
     selfSigned: formatName(peer.subject) === formatName(peer.issuer),
+    subjectCountry: field(peer.subject, 'C'),
+    subjectOrg: field(peer.subject, 'O'),
+    issuerCountry: field(peer.issuer, 'C'),
   };
 }
 
@@ -286,6 +296,23 @@ const safeIso = (value: string): string => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toISOString();
 };
+
+/**
+ * One distinguished-name field, when the certificate actually carries it.
+ *
+ * `formatName` below flattens a subject to a single display string, which is all
+ * the rest of the report needs. This keeps the structured fields the flattening
+ * throws away — `C` and `O` in particular, the only place a certificate says
+ * anything about who or where its owner is.
+ *
+ * Absent on domain-validated certificates, which are the majority: they prove
+ * control of a hostname and assert nothing else. Null here therefore means "not
+ * claimed", never "not verified".
+ */
+function field(name: Record<string, unknown> | undefined, key: string): string | null {
+  const value = name?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
 
 function formatName(name: Record<string, unknown> | undefined): string {
   if (name === undefined) return 'unknown';

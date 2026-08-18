@@ -232,7 +232,7 @@ export function detectConnectivityFindings(server: ServerEvidence): Finding[] {
         severity: tcpBand === 'bad' ? 'major' : 'minor',
         owner: 'nobody',
         title: 'The server is a long way away',
-        plain: `Simply opening a connection to the server took ${ms(value)}, which mostly reflects physical distance.`,
+        plain: `Opening a connection to the server took ${ms(value)} before a single byte of the page was requested, which mostly reflects physical distance.`,
         impact:
           'Every visitor near us pays this delay on each new connection, and visitors further away pay more.',
         technical: `TCP connect to ${reachable.address} took ${ms(value)}. This is dominated by round-trip time and therefore by geography.`,

@@ -36,23 +36,9 @@ body {
   }
 }
 
-/* Skip link: the first thing a keyboard user meets. Visually hidden until
-   focused, then clearly visible. */
-.skip-link {
-  position: absolute;
-  top: 0;
-  left: 0;
-  padding: 0.5rem 1rem;
-  background: var(--dwc-brand);
-  color: var(--dwc-text-inverse);
-  border-radius: 0 0 var(--dwc-radius) 0;
-  transform: translateY(-110%);
-  transition: transform 120ms ease;
-  z-index: 100;
-}
-.skip-link:focus {
-  transform: translateY(0);
-}
+/* The skip link lives in dwc-app's shadow root, so its styles have to live there
+   too — a rule here could never have reached it, which is why the class sat
+   unused in this file for so long. See apps/web/src/app.ts. */
 
 @media print {
   body {

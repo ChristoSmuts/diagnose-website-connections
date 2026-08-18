@@ -1,6 +1,6 @@
 import type { Culprit, Evidence, Finding } from '@dwc/contracts';
 import { ms } from './findings/helpers.js';
-import { LOCAL_CONTROL_RTT_MS, THRESHOLDS } from './thresholds.js';
+import { THRESHOLDS, controlIsLoopback } from './thresholds.js';
 
 /**
  * Layer 1 copy: the sentence most people will read and then stop.
@@ -28,8 +28,8 @@ export function narrate(
    * agree, or the report contradicts itself — saying "your connection looks
    * healthy at 3ms" directly beside a tile reading "Not measured".
    */
-  const rawRtt = evidence.client?.control.median ?? null;
-  const rtt = rawRtt !== null && rawRtt >= LOCAL_CONTROL_RTT_MS ? rawRtt : null;
+  const client = evidence.client;
+  const rtt = client === null || controlIsLoopback(client) ? null : client.control.median;
 
   switch (culprit) {
     case 'healthy': {

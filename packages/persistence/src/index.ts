@@ -4,6 +4,7 @@ export { reports, sites, type ReportRow, type SiteRow } from './schema.js';
 export {
   DuplicateSiteError,
   ImmutableReportError,
+  RunningReportError,
   type CreateReportInput,
   type CreateSiteInput,
   type Repositories,

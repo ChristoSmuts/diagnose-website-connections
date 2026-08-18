@@ -11,18 +11,29 @@ import {
   type Principal,
 } from '@dwc/contracts';
 import { analyse } from '@dwc/diagnostics';
-import { openDatabase, DuplicateSiteError, type Repositories } from '@dwc/persistence';
+import {
+  openDatabase,
+  DuplicateSiteError,
+  RunningReportError,
+  type Repositories,
+} from '@dwc/persistence';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, {
+  type FastifyError,
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from 'fastify';
 // The app version lives in the root manifest (see VERSIONING.md). Reading it here
 // rather than repeating the literal is what stops /api/health quietly reporting a
 // version the deployment stopped being months ago — it had already drifted once.
 import rootManifest from '../../../package.json' with { type: 'json' };
 import type { Config } from './config.ts';
 import { resolvePrincipal, expectedToken } from './principal.ts';
+import { probeIcon } from './probes/icon.ts';
 import { runServerProbe } from './probes/run.ts';
 import { BlockedTargetError, InvalidUrlError, normalizeUrl } from './safety/ssrf.ts';
 
@@ -48,12 +59,66 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
     origin: config.corsOrigins,
     credentials: true,
   });
+  /*
+   * The global limit is a backstop, not the probe limit.
+   *
+   * Probing sends traffic to third parties on a stranger's behalf, so that
+   * deserves a tight per-IP cap — but it was applied to every route, reads
+   * included. Opening a report, expanding a site and reloading the page all spent
+   * from the same twenty-per-minute budget, and a few refreshes while testing was
+   * enough to exhaust it. The strict limit now sits on POST /api/diagnose alone,
+   * where the outbound connections actually happen.
+   */
   await app.register(rateLimit, {
-    max: config.limits.rateLimitPerMinute,
+    max: config.limits.readsPerMinute,
     timeWindow: '1 minute',
-    // Probing sends traffic to third parties on a stranger's behalf, so the
-    // limit is per-IP and deliberately modest.
     keyGenerator: (request) => request.ip,
+    /*
+     * Without this the plugin sends {statusCode, error: "Too Many Requests",
+     * message} — where `error` is a string, not the {code, message} object every
+     * other response uses. The web client read `body.error.code` off a string,
+     * got undefined, and rendered "Something went wrong." for what was really a
+     * rate limit. `rate-limited` has been in ApiErrorSchema all along, unemitted.
+     */
+    errorResponseBuilder: (_request, context) => ({
+      statusCode: 429,
+      error: {
+        code: 'rate-limited' as const,
+        message: `Too many requests. Try again in ${context.after}.`,
+        retryAfter: Math.ceil(context.ttl / 1000),
+      },
+    }),
+  });
+
+  /*
+   * Guarantees every error matches ApiErrorSchema.
+   *
+   * Route handlers were careful, but anything thrown outside one — a plugin, a
+   * schema failure, an unexpected throw — fell through to Fastify's default
+   * serializer and produced a shape the client cannot read. One contract for
+   * errors is worth more than five careful call sites.
+   */
+  app.setErrorHandler((error: FastifyError, request, reply) => {
+    const status = error.statusCode ?? 500;
+
+    // Already in our shape (the rate limiter builds its own): pass it through.
+    // @fastify/rate-limit throws whatever errorResponseBuilder returns, so this
+    // arrives carrying an `error` object rather than being a plain FastifyError.
+    const carried = (error as unknown as { error?: unknown }).error;
+    if (typeof carried === 'object' && carried !== null) {
+      return reply.status(status).send({ error: carried });
+    }
+
+    if (status >= 500) {
+      request.log.error({ err: error }, 'unhandled request failure');
+      return reply.status(status).send({
+        error: { code: 'internal', message: 'Something went wrong running that check.' },
+      });
+    }
+
+    return reply.status(status).send({
+      error: { code: 'invalid-url', message: error.message },
+    });
   });
 
   app.addHook('onClose', () => {
@@ -83,6 +148,9 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
     if (error instanceof DuplicateSiteError) {
       return reply.status(409).send({ error: { code: 'invalid-url', message: error.message } });
     }
+    if (error instanceof RunningReportError) {
+      return reply.status(409).send({ error: { code: 'invalid-url', message: error.message } });
+    }
     app.log.error({ err: error }, 'unhandled request failure');
     return reply.status(500).send({
       error: { code: 'internal', message: 'Something went wrong running that check.' },
@@ -91,10 +159,18 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
 
   // --- health & control endpoints ------------------------------------------
 
-  app.get('/api/health', () => ({
+  /*
+   * Deployment facts the browser needs before it can measure anything.
+   *
+   * `controlUrl` belongs here rather than in its own endpoint for the same reason
+   * `authMode` does: both answer "how is this instance set up", both are read
+   * once at startup, and neither is worth a second round trip.
+   */
+  app.get('/api/health', { config: { rateLimit: false } }, () => ({
     status: 'ok' as const,
     version: rootManifest.version,
     authMode: config.authMode,
+    controlUrl: config.controlUrl,
   }));
 
   /**
@@ -252,7 +328,14 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
     const principal = requirePrincipal(request, reply);
     if (principal === null) return reply;
     const { id } = request.params as { id: string };
-    return repos.reports.hardDelete(principal.id, id) ? reply.status(204).send() : notFound(reply);
+    try {
+      return repos.reports.hardDelete(principal.id, id)
+        ? reply.status(204).send()
+        : notFound(reply);
+    } catch (error) {
+      // RunningReportError: a diagnostic is still streaming into this row.
+      return fail(reply, error);
+    }
   });
 
   // --- the diagnostic itself, streamed -------------------------------------
@@ -267,89 +350,118 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
    * SSE over WebSockets: the traffic is one-way, and SSE survives proxies and
    * reconnects without any extra machinery.
    */
-  app.post('/api/diagnose', async (request, reply) => {
-    const principal = requirePrincipal(request, reply);
-    if (principal === null) return reply;
+  app.post(
+    '/api/diagnose',
+    // The tight per-IP cap lives here, on the one route that opens outbound
+    // connections to an address a stranger chose.
+    { config: { rateLimit: { max: config.limits.rateLimitPerMinute, timeWindow: '1 minute' } } },
+    async (request, reply) => {
+      const principal = requirePrincipal(request, reply);
+      if (principal === null) return reply;
 
-    let body;
-    try {
-      body = StartDiagnosticRequestSchema.parse(request.body);
-    } catch (error) {
-      return fail(reply, error);
-    }
+      let body;
+      try {
+        body = StartDiagnosticRequestSchema.parse(request.body);
+      } catch (error) {
+        return fail(reply, error);
+      }
 
-    reply.raw.writeHead(200, {
-      'content-type': 'text/event-stream',
-      'cache-control': 'no-store',
-      connection: 'keep-alive',
-      // Nginx buffers SSE into uselessness without this.
-      'x-accel-buffering': 'no',
-    });
+      reply.raw.writeHead(200, {
+        'content-type': 'text/event-stream',
+        'cache-control': 'no-store',
+        connection: 'keep-alive',
+        // Nginx buffers SSE into uselessness without this.
+        'x-accel-buffering': 'no',
+      });
 
-    const send = (event: DiagnosticEvent): void => {
-      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
-    };
+      const send = (event: DiagnosticEvent): void => {
+        reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
+      };
 
-    let reportId: string | null = null;
+      let reportId: string | null = null;
 
-    try {
-      const target = normalizeUrl(body.url);
+      try {
+        const target = normalizeUrl(body.url);
 
-      const site =
-        (body.siteId !== undefined
-          ? repos.sites.findById(principal.id, body.siteId)
-          : repos.sites.findByUrl(principal.id, target.normalizedUrl)) ??
-        repos.sites.create({
-          principalId: principal.id,
-          url: target.normalizedUrl,
-          label: target.host,
-          tags: [],
+        const site =
+          (body.siteId !== undefined
+            ? repos.sites.findById(principal.id, body.siteId)
+            : repos.sites.findByUrl(principal.id, target.normalizedUrl)) ??
+          repos.sites.create({
+            principalId: principal.id,
+            url: target.normalizedUrl,
+            label: target.host,
+            tags: [],
+          });
+
+        const report = repos.reports.create({ principalId: principal.id, siteId: site.id });
+        reportId = report.id;
+        send({ type: 'started', reportId: report.id, siteId: site.id });
+
+        const evidence = await runServerProbe(body.url, config, (phase, status, message) => {
+          send({ type: 'phase', phase, status, message });
         });
 
-      const report = repos.reports.create({ principalId: principal.id, siteId: site.id });
-      reportId = report.id;
-      send({ type: 'started', reportId: report.id, siteId: site.id });
+        send({
+          type: 'phase',
+          phase: 'analysing',
+          status: 'started',
+          message: 'Working out what it means…',
+        });
 
-      const evidence = await runServerProbe(body.url, config, (phase, status, message) => {
-        send({ type: 'phase', phase, status, message });
-      });
+        // The browser has not reported yet, so the verdict deliberately cannot
+        // blame the user's connection. It is revised when client evidence arrives.
+        const bundle: Evidence = { server: evidence, additionalVantages: [], client: null };
+        const verdict = analyse(bundle);
+        const completed = repos.reports.complete(report.id, bundle, verdict);
 
-      send({
-        type: 'phase',
-        phase: 'analysing',
-        status: 'started',
-        message: 'Working out what it means…',
-      });
+        send({ type: 'phase', phase: 'analysing', status: 'complete', message: 'Done' });
+        if (completed !== null) send({ type: 'complete', report: completed });
 
-      // The browser has not reported yet, so the verdict deliberately cannot
-      // blame the user's connection. It is revised when client evidence arrives.
-      const bundle: Evidence = { server: evidence, additionalVantages: [], client: null };
-      const verdict = analyse(bundle);
-      const completed = repos.reports.complete(report.id, bundle, verdict);
-
-      send({ type: 'phase', phase: 'analysing', status: 'complete', message: 'Done' });
-      if (completed !== null) send({ type: 'complete', report: completed });
-    } catch (error) {
-      const message =
-        error instanceof InvalidUrlError || error instanceof BlockedTargetError
-          ? error.message
-          : 'Something went wrong running that check.';
-
-      if (reportId !== null) {
-        try {
-          repos.reports.fail(reportId, message);
-        } catch {
-          // Already finished; the stored record stands.
+        /*
+         * Fetch the site's favicon, once, after the verdict is already out.
+         *
+         * Deliberately after the stream's payload and deliberately unawaited by
+         * anything the reader is waiting on: it is decoration, and it must never
+         * delay or fail a diagnosis. `needsIcon` keeps it to one attempt per site
+         * — a site with no favicon is not worth asking about on every run.
+         */
+        if (repos.sites.needsIcon(principal.id, site.id)) {
+          try {
+            const icon = await probeIcon({
+              origin: target.normalizedUrl,
+              timeoutMs: Math.min(config.timeouts.httpMs, 5_000),
+              resolvers: config.resolvers,
+            });
+            repos.sites.setIcon(principal.id, site.id, icon);
+          } catch (error) {
+            // Recorded as "looked, found nothing" so it is not retried forever.
+            request.log.debug({ err: error }, 'favicon lookup failed');
+            repos.sites.setIcon(principal.id, site.id, null);
+          }
         }
-      }
-      app.log.error({ err: error }, 'diagnostic failed');
-      send({ type: 'failed', reportId, error: message });
-    } finally {
-      reply.raw.end();
-    }
+      } catch (error) {
+        const message =
+          error instanceof InvalidUrlError || error instanceof BlockedTargetError
+            ? error.message
+            : 'Something went wrong running that check.';
 
-    return reply;
-  });
+        if (reportId !== null) {
+          try {
+            repos.reports.fail(reportId, message);
+          } catch {
+            // Already finished; the stored record stands.
+          }
+        }
+        app.log.error({ err: error }, 'diagnostic failed');
+        send({ type: 'failed', reportId, error: message });
+      } finally {
+        reply.raw.end();
+      }
+
+      return reply;
+    },
+  );
 
   /**
    * Merge browser-measured evidence and re-run attribution.

@@ -29,6 +29,23 @@
 
     <!-- Tells the browser to render native form controls and scrollbars to match. -->
     <meta name="color-scheme" content="light dark" />
+
+    <!--
+      The SVG is the real icon — it follows the browser theme, which a raster
+      cannot. The .ico is the fallback for browsers that will not load an SVG
+      favicon, and it is requested from the root by name whether it is linked or
+      not: without the file, that request fell through to the SPA handler and came
+      back as HTML with a 200.
+    -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Tints browser chrome on mobile. Two values, because one of them is wrong
+         against the other theme's background. -->
+    <meta name="theme-color" content="#f7f8fa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#10131a" media="(prefers-color-scheme: dark)" />
   </head>
   <body>
     <dwc-app></dwc-app>

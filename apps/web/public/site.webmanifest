@@ -1,0 +1,13 @@
+{
+  "name": "Connection Diagnostics",
+  "short_name": "Diagnostics",
+  "description": "Find out whether a slow site is the server, your connection, or the path between them.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#2f5fbf",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}

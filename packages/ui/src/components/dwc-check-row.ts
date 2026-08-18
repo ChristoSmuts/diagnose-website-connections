@@ -42,8 +42,18 @@ export class DwcCheckRow extends LitElement {
   static override styles = [
     ...sharedStyles,
     css`
+      /*
+       * min-width: 0 is what actually lets a row narrow.
+       *
+       * Rows are grid items, and a grid item's automatic minimum size is its
+       * min-content width — so the track cannot go below the widest row however
+       * hard the row's own children try to truncate. Ellipsis rules inside are
+       * necessary and, on their own, completely ineffective: a long headline
+       * still forced the whole page wider than a 320 px viewport.
+       */
       :host {
         display: block;
+        min-width: 0;
       }
 
       .row {
@@ -109,8 +119,22 @@ export class DwcCheckRow extends LitElement {
         white-space: nowrap;
       }
 
+      /*
+       * Shrinks and truncates rather than holding its intrinsic width.
+       *
+       * This was 'flex: none', which held for as long as every headline was a
+       * word or two — "AS13335", "Cloudflare", "TLS 1.3". A longer one then
+       * pushed the chevron clean off the right of a 320 px viewport and took the
+       * whole page's horizontal scroll with it. Truncating loses the tail of a
+       * value that is repeated in full in the detail below; overflowing loses
+       * the control that opens it.
+       */
       .headline {
-        flex: none;
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
         font-size: var(--dwc-text-sm);
         color: var(--dwc-text-muted);
       }

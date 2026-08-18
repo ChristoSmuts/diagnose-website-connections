@@ -44,6 +44,10 @@ export interface SiteRepository {
   findByUrl(principalId: string, url: string): Site | null;
   list(principalId: string, include: 'active' | 'archived' | 'all'): SiteWithSummary[];
   update(principalId: string, id: string, input: UpdateSiteInput): Site | null;
+  /** Records the outcome of a favicon lookup. Null means "looked, found nothing". */
+  setIcon(principalId: string, id: string, dataUrl: string | null): void;
+  /** True when this site has never had its favicon looked up. */
+  needsIcon(principalId: string, id: string): boolean;
   /** Soft delete — reversible via restore. */
   archive(principalId: string, id: string): Site | null;
   restore(principalId: string, id: string): Site | null;
@@ -88,6 +92,20 @@ export class ImmutableReportError extends Error {
   constructor(id: string, status: ReportStatus) {
     super(`Report ${id} is already ${status} and cannot be modified.`);
     this.name = 'ImmutableReportError';
+  }
+}
+
+/**
+ * Thrown when a delete would pull a report out from under a running diagnostic.
+ *
+ * Distinct from ImmutableReportError: that one guards the append-only rule for
+ * *writes*, this one guards a delete. Conflating them would make the API's reply
+ * misleading — nothing is being rewritten here.
+ */
+export class RunningReportError extends Error {
+  constructor(id: string) {
+    super(`Report ${id} is still running. Wait for it to finish before deleting it.`);
+    this.name = 'RunningReportError';
   }
 }
 

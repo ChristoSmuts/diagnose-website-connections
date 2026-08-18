@@ -20,10 +20,60 @@ export class ApiError extends Error {
     message: string,
     readonly code: string,
     readonly status: number,
+    /** Seconds to wait, when the server said. Only meaningful for a rate limit. */
+    readonly retryAfter: number | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+
+  /** True when the server refused because the caller is going too fast. */
+  get isRateLimited(): boolean {
+    return this.status === 429 || this.code === 'rate-limited';
+  }
+}
+
+/**
+ * Reads an error body without trusting its shape.
+ *
+ * The old version tested `'error' in body` and then cast straight to
+ * `{code, message}`. That holds for our own responses, but a plugin error puts a
+ * plain **string** in `error` — and reading `.code` off a string yields undefined
+ * rather than throwing, so every rate limit surfaced as the generic
+ * "Something went wrong." with code 'internal'. The status was right there and
+ * nothing looked at it.
+ */
+function readError(body: unknown, response: Response): ApiError {
+  const retryHeader = Number(response.headers.get('retry-after'));
+  const retryAfter = Number.isFinite(retryHeader) && retryHeader > 0 ? retryHeader : null;
+
+  const carried: unknown =
+    body !== null && typeof body === 'object' && 'error' in body ? body.error : null;
+
+  const shaped =
+    typeof carried === 'object' && carried !== null
+      ? (carried as { code?: string; message?: string; retryAfter?: number })
+      : {};
+
+  if (response.status === 429) {
+    const seconds = shaped.retryAfter ?? retryAfter;
+    return new ApiError(
+      shaped.message ??
+        (seconds === null
+          ? 'Too many requests. Wait a moment and try again.'
+          : `Too many requests. Try again in ${String(seconds)} seconds.`),
+      'rate-limited',
+      429,
+      seconds,
+    );
+  }
+
+  return new ApiError(
+    shaped.message ?? 'Something went wrong.',
+    shaped.code ?? 'internal',
+    response.status,
+    retryAfter,
+  );
 }
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -48,23 +98,20 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 
   const body: unknown = await response.json().catch(() => null);
 
-  if (!response.ok) {
-    const error =
-      body !== null && typeof body === 'object' && 'error' in body
-        ? (body.error as { code?: string; message?: string })
-        : {};
-    throw new ApiError(
-      error.message ?? 'Something went wrong.',
-      error.code ?? 'internal',
-      response.status,
-    );
-  }
+  if (!response.ok) throw readError(body, response);
 
   return body as T;
 }
 
 export const api = {
-  health: () => json<{ status: string; version: string; authMode: string }>('/api/health'),
+  health: () =>
+    json<{
+      status: string;
+      version: string;
+      authMode: string;
+      /** Null means same-origin. See CONTROL_URL in the API config. */
+      controlUrl: string | null;
+    }>('/api/health'),
 
   listSites: (include: 'active' | 'archived' | 'all' = 'active') =>
     json<{ sites: SiteWithSummary[] }>(`/api/sites?include=${include}`).then((r) => r.sites),
@@ -130,15 +177,9 @@ export async function* streamDiagnostic(
 
   if (!response.ok || response.body === null) {
     const body: unknown = await response.json().catch(() => null);
-    const error =
-      body !== null && typeof body === 'object' && 'error' in body
-        ? (body.error as { code?: string; message?: string })
-        : {};
-    throw new ApiError(
-      error.message ?? 'The check could not be started.',
-      error.code ?? 'internal',
-      response.status,
-    );
+    // Same shape-blind parsing bug lived here too. Starting a diagnostic is the
+    // route most likely to be rate limited, so it is the one that most needed it.
+    throw readError(body, response);
   }
 
   const reader = response.body.getReader();

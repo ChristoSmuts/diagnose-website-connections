@@ -98,6 +98,46 @@ describe('honesty guarantees', () => {
    * real internet round trip to the user's ISP, producing a confident
    * "your provider is routing badly" verdict from evidence that did not exist.
    */
+  describe('a control endpoint that is not another instance', () => {
+    /**
+     * CONTROL_URL may point anywhere the browser can reach, timed opaquely. That
+     * is enough to characterise the reader's own link and deliberately not enough
+     * to judge the route: subtracting a baseline taken against a nearby anycast
+     * edge from the time to a distant target manufactures excess out of ordinary
+     * geography, and the report would hand that excess to the reader's provider.
+     */
+    const unpaired = () =>
+      makeEvidence({
+        clientRttSamples: [22, 24, 21, 23, 22],
+        clientTargetSamples: [520, 530, 515, 525, 522],
+        controlOrigin: 'https://www.google.com',
+        controlIsPaired: false,
+      });
+
+    it('still judges the reader’s own connection', () => {
+      const verdict = analyse(unpaired());
+      expect(verdict.vantages.userConnection.status).not.toBe('unknown');
+    });
+
+    it('refuses to judge the route, and blames no provider for distance', () => {
+      const verdict = analyse(unpaired());
+      expect(verdict.vantages.networkPath.status).toBe('unknown');
+      expect(verdict.culprit).not.toBe('network-path');
+      expect(verdict.findings.some((f) => f.code === 'path-degraded')).toBe(false);
+    });
+
+    it('says why, and how to get the route measured too', () => {
+      const verdict = analyse(unpaired());
+      expect(verdict.vantages.networkPath.summary).toMatch(/not another instance/i);
+      expect(verdict.vantages.networkPath.summary).toMatch(/CONTROL_URL/);
+    });
+
+    it('keeps judging the route when the endpoint is a paired instance', () => {
+      const verdict = analyse(scenarios.remoteControl());
+      expect(verdict.vantages.networkPath.status).not.toBe('unknown');
+    });
+  });
+
   describe('loopback control endpoint', () => {
     const local = () =>
       makeEvidence({

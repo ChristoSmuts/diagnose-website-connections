@@ -2,7 +2,7 @@ import { analyse } from '@dwc/diagnostics';
 import { scenarios } from '@dwc/diagnostics/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { LATEST_VERSION } from './migrations.js';
-import { ImmutableReportError, type Repositories } from './repositories.js';
+import { ImmutableReportError, RunningReportError, type Repositories } from './repositories.js';
 import { openDatabase } from './sqlite.js';
 
 let repos: Repositories & { migrated: string[] };
@@ -84,6 +84,41 @@ describe('archive is reversible, delete is not', () => {
     expect(repos.reports.findById(ALICE, report.id)?.archivedAt).toBeNull();
   });
 
+  /**
+   * The archive cascade used to be a one-way trip for anything caught in it.
+   *
+   * `restore` cleared `archived_at` on every report belonging to the site, so a
+   * run the user had deliberately archived came back the moment they restored
+   * the site — silently, and with nothing to show it had happened. The fix keys
+   * off the cascade's own timestamp, which is why this test drives the clock:
+   * distinct timestamps are exactly the assumption being relied on.
+   */
+  it('leaves an individually archived report archived when its site is restored', () => {
+    let tick = 0;
+    const clock = (): string => new Date(Date.UTC(2026, 0, 1, 0, 0, tick++)).toISOString();
+    const scoped = openDatabase({ path: ':memory:', now: clock });
+
+    const site = scoped.sites.create({
+      principalId: ALICE,
+      url: 'https://a.test/',
+      label: 'A',
+      tags: [],
+    });
+    const kept = scoped.reports.create({ principalId: ALICE, siteId: site.id });
+    const hidden = scoped.reports.create({ principalId: ALICE, siteId: site.id });
+
+    // The user archives one run on its own, then archives the whole site later.
+    scoped.reports.archive(ALICE, hidden.id);
+    scoped.sites.archive(ALICE, site.id);
+    expect(scoped.reports.listForSite(ALICE, site.id, 'active')).toHaveLength(0);
+
+    scoped.sites.restore(ALICE, site.id);
+
+    const active = scoped.reports.listForSite(ALICE, site.id, 'active').map((r) => r.id);
+    expect(active).toEqual([kept.id]);
+    expect(scoped.reports.findById(ALICE, hidden.id)?.archivedAt).not.toBeNull();
+  });
+
   it('cascades a hard delete to the site’s reports', () => {
     const site = newSite();
     const report = repos.reports.create({ principalId: ALICE, siteId: site.id });
@@ -161,6 +196,74 @@ describe('report immutability', () => {
  * the default deployment has one principal, because that is exactly the
  * situation in which such a bug would go unnoticed until multi-user is enabled.
  */
+/**
+ * Deleting is allowed; deleting out from under a live diagnostic is not.
+ *
+ * A running report has a probe streaming into it. Removing the row mid-flight
+ * left `complete()` matching nothing and returning null, so the run ended against
+ * a record that no longer existed and reported nothing at all.
+ */
+describe('deleting a running report', () => {
+  it('refuses while the diagnostic is still streaming', () => {
+    const site = newSite();
+    const report = repos.reports.create({ principalId: ALICE, siteId: site.id });
+
+    expect(() => repos.reports.hardDelete(ALICE, report.id)).toThrow(RunningReportError);
+    expect(repos.reports.findById(ALICE, report.id)).not.toBeNull();
+  });
+
+  it('allows it once the report has finished', () => {
+    const site = newSite();
+    const report = repos.reports.create({ principalId: ALICE, siteId: site.id });
+    const evidence = scenarios.healthy();
+    repos.reports.complete(report.id, evidence, analyse(evidence));
+
+    expect(repos.reports.hardDelete(ALICE, report.id)).toBe(true);
+    expect(repos.reports.findById(ALICE, report.id)).toBeNull();
+  });
+
+  it('reports a missing report as not found rather than throwing', () => {
+    expect(repos.reports.hardDelete(ALICE, 'no-such-report')).toBe(false);
+  });
+});
+
+/**
+ * The icon lookup is remembered whether or not it found anything.
+ *
+ * Without that, every site with no favicon would be asked again on every single
+ * run — a request to somebody else's server for something already known absent.
+ */
+describe('site icons', () => {
+  it('has not been looked up on a new site', () => {
+    const site = newSite();
+    expect(repos.sites.needsIcon(ALICE, site.id)).toBe(true);
+    expect(repos.sites.findById(ALICE, site.id)?.iconDataUrl).toBeNull();
+  });
+
+  it('stores an icon and stops asking', () => {
+    const site = newSite();
+    repos.sites.setIcon(ALICE, site.id, 'data:image/png;base64,AAAA');
+
+    expect(repos.sites.findById(ALICE, site.id)?.iconDataUrl).toBe('data:image/png;base64,AAAA');
+    expect(repos.sites.needsIcon(ALICE, site.id)).toBe(false);
+  });
+
+  it('stops asking even when there was nothing to find', () => {
+    const site = newSite();
+    repos.sites.setIcon(ALICE, site.id, null);
+
+    expect(repos.sites.findById(ALICE, site.id)?.iconDataUrl).toBeNull();
+    expect(repos.sites.needsIcon(ALICE, site.id)).toBe(false);
+  });
+
+  it('cannot be set across principals', () => {
+    const site = newSite();
+    repos.sites.setIcon(BOB, site.id, 'data:image/png;base64,AAAA');
+
+    expect(repos.sites.findById(ALICE, site.id)?.iconDataUrl).toBeNull();
+  });
+});
+
 describe('principal scoping', () => {
   it('hides one principal’s sites from another', () => {
     const site = newSite(ALICE);

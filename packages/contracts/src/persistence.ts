@@ -32,6 +32,15 @@ export const SiteSchema = z.object({
   label: z.string(),
   tags: z.array(z.string()).default([]),
   notes: z.string().nullable().default(null),
+  /**
+   * The site's favicon as a data URL, or null if it has none.
+   *
+   * Fetched by the server through the same SSRF guard as everything else, then
+   * stored. Letting the page request it instead would announce every saved site
+   * to its origin on every load, and a favicon service would be a third party in
+   * a tool that has none. Defaulted so rows written before this field still parse.
+   */
+  iconDataUrl: z.string().nullable().default(null),
   /** Non-null means archived. Soft delete, so restore is lossless. */
   archivedAt: z.iso.datetime().nullable().default(null),
   createdAt: z.iso.datetime(),

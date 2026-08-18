@@ -20,6 +20,9 @@ const PHASES: { key: ProbePhase; label: string }[] = [
   { key: 'analysing', label: 'Working out what it means' },
 ];
 
+/** Remembers the collapsed sidebar between visits, alongside the theme choice. */
+const SIDEBAR_STORAGE_KEY = 'dwc-sidebar-collapsed';
+
 export class DwcApp extends LitElement {
   static override styles = [
     ...sharedStyles,
@@ -128,6 +131,35 @@ export class DwcApp extends LitElement {
         min-height: 0;
       }
 
+      /*
+       * Skip link. global.css has styled one since the first commit and nothing
+       * ever used the class — the shell lives in a shadow root, so a rule in the
+       * document sheet could never have reached it.
+       *
+       * It earns its place here: the sidebar precedes main in the DOM, so with a
+       * handful of saved sites a keyboard user tabs through every site and every
+       * site action before reaching the address field. Hidden until focused.
+       */
+      .skip-link {
+        position: absolute;
+        top: 0;
+        left: 0;
+        padding: var(--dwc-space-2) var(--dwc-space-4);
+        border: none;
+        border-radius: 0 0 var(--dwc-radius) 0;
+        background: var(--dwc-brand);
+        color: var(--dwc-text-inverse);
+        font: inherit;
+        font-size: var(--dwc-text-sm);
+        cursor: pointer;
+        transform: translateY(-110%);
+        transition: transform var(--dwc-duration-fast) var(--dwc-ease);
+        z-index: var(--dwc-z-skip);
+      }
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+
       aside {
         position: fixed;
         inset: 0 auto 0 0;
@@ -169,11 +201,52 @@ export class DwcApp extends LitElement {
         gap: var(--dwc-space-6);
       }
 
+      /*
+       * The collapse control only means anything beside a persistent sidebar. On
+       * a phone the drawer is already all-or-nothing, and a second way to hide it
+       * would just be a control that appears to do nothing.
+       */
+      .collapse-button {
+        display: none;
+      }
+
       @media (min-width: 60rem) {
         .body {
           grid-template-columns: var(--dwc-sidebar-width) 1fr;
+          transition: grid-template-columns var(--dwc-duration) var(--dwc-ease-out);
         }
+        .body:has(aside[data-collapsed='true']) {
+          grid-template-columns: var(--dwc-sidebar-rail) 1fr;
+        }
+
+        .collapse-button {
+          display: grid;
+          place-items: center;
+          min-width: var(--dwc-space-8);
+          min-height: var(--dwc-space-8);
+          border: none;
+          border-radius: var(--dwc-radius);
+          background: transparent;
+          color: var(--dwc-text-muted);
+          cursor: pointer;
+        }
+        .collapse-button:hover {
+          background: var(--dwc-surface-sunken);
+          color: var(--dwc-text);
+        }
+
+        aside[data-collapsed='true'] {
+          width: var(--dwc-sidebar-rail);
+          padding-inline: var(--dwc-space-1);
+          overflow-x: hidden;
+        }
+        aside[data-collapsed='true'] .sidebar-head,
+        aside[data-collapsed='true'] .sidebar-foot {
+          justify-content: center;
+        }
+
         aside {
+          width: auto;
           /*
            * Two things were stopping this from sticking.
            *
@@ -223,6 +296,14 @@ export class DwcApp extends LitElement {
         margin-top: auto;
         padding-top: var(--dwc-space-3);
         border-top: 1px solid var(--dwc-border);
+        display: flex;
+        align-items: center;
+        gap: var(--dwc-space-2);
+      }
+      /* The archived toggle takes the room; the theme control sits beside it. */
+      .sidebar-foot dwc-button {
+        flex: 1;
+        min-width: 0;
       }
 
       .hero {
@@ -322,6 +403,22 @@ export class DwcApp extends LitElement {
         font-size: var(--dwc-text-sm);
       }
 
+      .error-dismiss {
+        margin-left: auto;
+        display: grid;
+        place-items: center;
+        min-width: var(--dwc-space-6);
+        min-height: var(--dwc-space-6);
+        border: none;
+        border-radius: var(--dwc-radius-sm);
+        background: transparent;
+        color: inherit;
+        cursor: pointer;
+      }
+      .error-dismiss:hover {
+        background: var(--dwc-bad-border);
+      }
+
       .report-head {
         display: flex;
         flex-wrap: wrap;
@@ -383,6 +480,9 @@ export class DwcApp extends LitElement {
     throughputConsent: { state: true },
     showArchived: { state: true },
     pendingDelete: { state: true },
+    sidebarCollapsed: { state: true },
+    isDesktop: { state: true },
+    controlUrl: { state: true },
   };
 
   private theme: ThemeChoice = 'system';
@@ -397,20 +497,132 @@ export class DwcApp extends LitElement {
   private error: string | null = null;
   private throughputConsent = false;
   private showArchived = false;
-  private pendingDelete: { kind: 'site' | 'report'; id: string; label: string } | null = null;
+  private pendingDelete: {
+    kind: 'site' | 'report';
+    id: string;
+    label: string;
+    /** Set for reports, so the history list can be reloaded after the delete. */
+    siteId?: string;
+  } | null = null;
+  private sidebarCollapsed = false;
+  private isDesktop = false;
+  /** Where the browser measures its baseline. Null means same-origin. */
+  private controlUrl: string | null = null;
+
+  /**
+   * Drives which side of the 60rem breakpoint we are on.
+   *
+   * A media query alone could hide and show two copies of the theme toggle, but
+   * two copies means two tab stops and two controls for a screen reader to
+   * announce for one setting. Rendering one instance in the place that suits the
+   * viewport is the honest version.
+   */
+  private readonly desktopQuery = window.matchMedia('(min-width: 60rem)');
+
+  private readonly onBreakpoint = (event: MediaQueryListEvent): void => {
+    this.isDesktop = event.matches;
+  };
+
+  private readonly onPopState = (): void => {
+    void this.routeTo(window.location.pathname, { push: false });
+  };
+
+  /**
+   * Stops a reload or a closed tab silently discarding a running diagnostic.
+   *
+   * Registered only while `running` is true — a permanently attached handler
+   * would prompt on every navigation, which trains people to dismiss it.
+   */
+  private readonly onBeforeUnload = (event: BeforeUnloadEvent): void => {
+    if (!this.running) return;
+    event.preventDefault();
+  };
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.theme = readStoredTheme(localStorage);
     applyTheme(this.theme, document.documentElement);
-    void this.refreshSites();
+    this.sidebarCollapsed = localStorage.getItem(SIDEBAR_STORAGE_KEY) === 'true';
+
+    this.isDesktop = this.desktopQuery.matches;
+    this.desktopQuery.addEventListener('change', this.onBreakpoint);
+    window.addEventListener('popstate', this.onPopState);
+    window.addEventListener('beforeunload', this.onBeforeUnload);
+
+    void this.start();
+  }
+
+  override disconnectedCallback(): void {
+    this.desktopQuery.removeEventListener('change', this.onBreakpoint);
+    window.removeEventListener('popstate', this.onPopState);
+    window.removeEventListener('beforeunload', this.onBeforeUnload);
+    super.disconnectedCallback();
+  }
+
+  /**
+   * First load: the sites list, the deployment's control endpoint, and whatever
+   * the URL says we should be looking at.
+   *
+   * The health call is what tells the browser where to measure its latency
+   * baseline. It fails soft — a missing answer just means same-origin, which is
+   * the behaviour this had before the setting existed.
+   */
+  private async start(): Promise<void> {
+    void api
+      .health()
+      .then((health) => {
+        this.controlUrl = health.controlUrl;
+      })
+      .catch(() => {
+        this.controlUrl = null;
+      });
+
+    await this.refreshSites();
+    await this.routeTo(window.location.pathname, { push: false });
+  }
+
+  // --- routing -------------------------------------------------------------
+
+  /**
+   * Reports have real URLs, so a refresh lands where you were.
+   *
+   * Previously every reload cold-started to the hero and threw away what you were
+   * reading. The API already serves index.html for any non-/api path, so this
+   * needed nothing server-side — and it makes a report shareable as a side
+   * effect, which is the whole point of keeping history.
+   */
+  private async routeTo(path: string, options: { push: boolean }): Promise<void> {
+    const match = /^\/report\/([\w-]+)\/?$/.exec(path);
+
+    if (match === null) {
+      this.report = null;
+      this.liveVerdict = null;
+      if (options.push) history.pushState(null, '', '/');
+      return;
+    }
+
+    await this.openReport(match[1]!, { push: options.push });
+  }
+
+  /** Records the current report in the address bar without reloading anything. */
+  private pushReportUrl(reportId: string): void {
+    const url = `/report/${reportId}`;
+    if (window.location.pathname !== url) history.pushState(null, '', url);
   }
 
   // --- data ----------------------------------------------------------------
 
   private async refreshSites(): Promise<void> {
     try {
-      this.sites = await api.listSites(this.showArchived ? 'archived' : 'active');
+      /*
+       * The archived view lists every site, not only archived ones.
+       *
+       * A report can be archived on its own while its site stays active. Listing
+       * only archived sites made those reports unreachable: the only view that
+       * shows them had nothing in it to expand. Showing every site here is what
+       * makes "archived" mean archived *things* rather than archived sites.
+       */
+      this.sites = await api.listSites(this.showArchived ? 'all' : 'active');
     } catch (error) {
       this.error = error instanceof ApiError ? error.message : 'Could not load your saved sites.';
     }
@@ -427,12 +639,24 @@ export class DwcApp extends LitElement {
     }
   }
 
-  private async openReport(reportId: string): Promise<void> {
+  private async openReport(reportId: string, options = { push: true }): Promise<void> {
     try {
       this.liveVerdict = null;
       this.report = await api.getReport(reportId);
       this.sidebarOpen = false;
+      if (options.push) this.pushReportUrl(reportId);
     } catch (error) {
+      /*
+       * A URL can outlive the report it names — deleted, or from someone else's
+       * instance. Falling back to the hero with an explanation beats leaving a
+       * blank page under a URL that will never work again.
+       */
+      if (error instanceof ApiError && error.status === 404) {
+        this.report = null;
+        this.error = 'That report no longer exists.';
+        history.replaceState(null, '', '/');
+        return;
+      }
       this.error = error instanceof ApiError ? error.message : 'Could not open that report.';
     }
   }
@@ -466,6 +690,7 @@ export class DwcApp extends LitElement {
           this.setStep(event.phase, event.status, event.message);
         } else if (event.type === 'complete') {
           this.report = event.report;
+          this.pushReportUrl(event.report.id);
         } else if (event.type === 'failed') {
           this.error = event.error;
         }
@@ -494,6 +719,7 @@ export class DwcApp extends LitElement {
     try {
       const client = await runClientProbe({
         targetUrl: target,
+        controlUrl: this.controlUrl,
         throughputConsent: this.throughputConsent,
         onProgress: (message) => this.setStep('client', 'started', message),
       });
@@ -526,16 +752,47 @@ export class DwcApp extends LitElement {
     const pending = this.pendingDelete;
     if (pending === null) return;
 
+    const siteId = pending.kind === 'site' ? pending.id : (pending.siteId ?? null);
+
     if (pending.kind === 'site') {
       await api.deleteSite(pending.id);
-      if (this.report?.siteId === pending.id) this.report = null;
+      if (this.report?.siteId === pending.id) this.clearOpenReport();
     } else {
       await api.deleteReport(pending.id);
-      if (this.report?.id === pending.id) this.report = null;
+      if (this.report?.id === pending.id) this.clearOpenReport();
     }
 
     this.pendingDelete = null;
     await this.refreshSites();
+
+    // refreshSites only reloads the site list. Without this the expanded history
+    // keeps showing the run that was just deleted until the user collapses it.
+    if (pending.kind === 'report' && siteId !== null) await this.loadReports(siteId);
+  }
+
+  /** Closes whatever is open and takes the report id out of the address bar. */
+  private clearOpenReport(): void {
+    this.report = null;
+    this.liveVerdict = null;
+    if (window.location.pathname !== '/') history.replaceState(null, '', '/');
+  }
+
+  private async archiveReport(reportId: string, siteId: string): Promise<void> {
+    await api.archiveReport(reportId);
+    if (this.report?.id === reportId) this.clearOpenReport();
+    await this.loadReports(siteId);
+    await this.refreshSites();
+  }
+
+  private async restoreReport(reportId: string, siteId: string): Promise<void> {
+    await api.restoreReport(reportId);
+    await this.loadReports(siteId);
+    await this.refreshSites();
+  }
+
+  private toggleSidebarCollapsed(): void {
+    this.sidebarCollapsed = !this.sidebarCollapsed;
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, String(this.sidebarCollapsed));
   }
 
   // --- render --------------------------------------------------------------
@@ -543,6 +800,18 @@ export class DwcApp extends LitElement {
   override render(): TemplateResult {
     return html`
       <div class="shell">
+        <button
+          class="skip-link"
+          type="button"
+          @click=${() => {
+            // A button rather than an <a href="#main">: fragment navigation cannot
+            // address an id inside a shadow root, so the anchor would do nothing.
+            this.renderRoot.querySelector('main')?.focus();
+          }}
+        >
+          Skip to the main content
+        </button>
+
         <header>
           <button
             class="menu-button"
@@ -563,13 +832,20 @@ export class DwcApp extends LitElement {
             Connection Diagnostics
           </span>
 
-          <dwc-theme-toggle .choice=${this.theme} @theme-change=${this.onTheme}></dwc-theme-toggle>
+          ${
+            this.isDesktop
+              ? html`<dwc-theme-toggle
+                  .choice=${this.theme}
+                  @theme-change=${this.onTheme}
+                ></dwc-theme-toggle>`
+              : nothing
+          }
         </header>
 
         <div class="body">
           ${this.renderSidebar()}
-          <main>
-            <div class="content">${this.renderMain()}</div>
+          <main tabindex="-1">
+            <div class="content">${this.renderError()}${this.renderMain()}</div>
           </main>
         </div>
       </div>
@@ -592,6 +868,33 @@ export class DwcApp extends LitElement {
     `;
   }
 
+  /**
+   * The error banner, in every state rather than only on the hero.
+   *
+   * It used to live inside the hero branch of renderMain, which returns early
+   * whenever a report is on screen — so a failed re-run, a rate limit or a lost
+   * connection produced nothing at all for the reader to see.
+   */
+  private renderError(): TemplateResult | typeof nothing {
+    if (this.error === null) return nothing;
+
+    return html`
+      <p class="error" role="alert">
+        <dwc-icon name="warning"></dwc-icon>${this.error}
+        <button
+          class="error-dismiss"
+          type="button"
+          aria-label="Dismiss this message"
+          @click=${() => {
+            this.error = null;
+          }}
+        >
+          <dwc-icon name="close"></dwc-icon>
+        </button>
+      </p>
+    `;
+  }
+
   private renderSidebar(): TemplateResult {
     return html`
       ${
@@ -606,25 +909,61 @@ export class DwcApp extends LitElement {
           : nothing
       }
 
-      <aside data-open=${this.sidebarOpen ? 'true' : 'false'} aria-label="Saved sites">
+      <!--
+        The closed drawer is inert, not merely off-screen.
+
+        It stays mounted so it can animate, and 'transform' hides nothing from the
+        keyboard: every control inside it remained a tab stop, so tabbing from the
+        address field walked invisibly through the whole sidebar before reaching
+        anything on the page. Inert removes it from the tab order and the
+        accessibility tree together, which is what "hidden" is supposed to mean.
+      -->
+      <aside
+        data-open=${this.sidebarOpen ? 'true' : 'false'}
+        data-collapsed=${this.sidebarCollapsed ? 'true' : 'false'}
+        ?inert=${!this.isDesktop && !this.sidebarOpen}
+        aria-label="Saved sites"
+      >
         <div class="sidebar-head">
-          <span class="sidebar-title">${this.showArchived ? 'Archived' : 'Your sites'}</span>
-          <dwc-button
-            size="sm"
-            variant="ghost"
-            @click=${() => {
-              this.report = null;
-              this.sidebarOpen = false;
-            }}
+          ${
+            this.sidebarCollapsed
+              ? nothing
+              : html`<span class="sidebar-title">
+                  ${this.showArchived ? 'Archived' : 'Your sites'}
+                </span>`
+          }
+          ${
+            this.sidebarCollapsed
+              ? nothing
+              : html`<dwc-button
+                  size="sm"
+                  variant="ghost"
+                  @click=${() => {
+                    this.clearOpenReport();
+                    this.sidebarOpen = false;
+                  }}
+                >
+                  <dwc-icon name="plus"></dwc-icon>
+                  New
+                </dwc-button>`
+          }
+
+          <button
+            class="collapse-button"
+            type="button"
+            aria-label=${this.sidebarCollapsed ? 'Expand the sidebar' : 'Collapse the sidebar'}
+            aria-expanded=${this.sidebarCollapsed ? 'false' : 'true'}
+            @click=${() => this.toggleSidebarCollapsed()}
           >
-            <dwc-icon name="plus"></dwc-icon>
-            New
-          </dwc-button>
+            <dwc-icon name=${this.sidebarCollapsed ? 'chevron' : 'chevron-left'}></dwc-icon>
+          </button>
         </div>
 
         <dwc-nav-tree
           .sites=${this.sites}
           .reportsBySite=${this.reportsBySite}
+          ?collapsed=${this.sidebarCollapsed}
+          view=${this.showArchived ? 'archived' : 'active'}
           selected-site=${this.selectedSiteId ?? ''}
           selected-report=${this.report?.id ?? ''}
           @site-expand=${(e: CustomEvent<{ siteId: string }>) => void this.loadReports(e.detail.siteId)}
@@ -649,22 +988,54 @@ export class DwcApp extends LitElement {
           }}
           @report-select=${(e: CustomEvent<{ reportId: string }>) =>
             void this.openReport(e.detail.reportId)}
+          @report-archive=${(e: CustomEvent<{ reportId: string; siteId: string }>) =>
+            void this.archiveReport(e.detail.reportId, e.detail.siteId)}
+          @report-restore=${(e: CustomEvent<{ reportId: string; siteId: string }>) =>
+            void this.restoreReport(e.detail.reportId, e.detail.siteId)}
+          @report-delete=${(
+            e: CustomEvent<{ reportId: string; siteId: string; label: string }>,
+          ) => {
+            this.pendingDelete = {
+              kind: 'report',
+              id: e.detail.reportId,
+              label: e.detail.label,
+              siteId: e.detail.siteId,
+            };
+          }}
         ></dwc-nav-tree>
 
         <div class="sidebar-foot">
-          <dwc-button
-            size="sm"
-            variant="ghost"
-            full
-            @click=${async () => {
-              this.showArchived = !this.showArchived;
-              this.reportsBySite = {};
-              await this.refreshSites();
-            }}
-          >
-            <dwc-icon name=${this.showArchived ? 'restore' : 'archive'}></dwc-icon>
-            ${this.showArchived ? 'Back to your sites' : 'View archived'}
-          </dwc-button>
+          ${
+            this.sidebarCollapsed
+              ? nothing
+              : html`<dwc-button
+                  size="sm"
+                  variant="ghost"
+                  full
+                  @click=${async () => {
+                    this.showArchived = !this.showArchived;
+                    this.reportsBySite = {};
+                    await this.refreshSites();
+                  }}
+                >
+                  <dwc-icon name=${this.showArchived ? 'restore' : 'archive'}></dwc-icon>
+                  ${this.showArchived ? 'Back to your sites' : 'View archived'}
+                </dwc-button>`
+          }
+
+          <!--
+            One theme control, placed where the viewport can reach it. On a phone
+            the header has no room for it and the drawer is the only surface the
+            user can open, so it lives here instead of being duplicated.
+          -->
+          ${
+            this.isDesktop
+              ? nothing
+              : html`<dwc-theme-toggle
+                  .choice=${this.theme}
+                  @theme-change=${this.onTheme}
+                ></dwc-theme-toggle>`
+          }
         </div>
       </aside>
     `;
@@ -750,13 +1121,6 @@ export class DwcApp extends LitElement {
         </span>
       </label>
 
-      ${
-        this.error === null
-          ? nothing
-          : html`<p class="error" role="alert">
-              <dwc-icon name="warning"></dwc-icon>${this.error}
-            </p>`
-      }
       ${
         this.running
           ? html`

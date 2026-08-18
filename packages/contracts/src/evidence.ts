@@ -62,6 +62,36 @@ export const DnsEvidenceSchema = z.object({
 export type DnsEvidence = z.infer<typeof DnsEvidenceSchema>;
 
 // ---------------------------------------------------------------------------
+// Network identity
+// ---------------------------------------------------------------------------
+// Declared before the address schema because addresses now carry one. Zod
+// schemas are plain values, so a forward reference here is a runtime error, not
+// a type error — it would surface as an unhelpful TDZ crash at import time.
+
+/** Sourced from Team Cymru's free DNS-based ASN service — no key, no account. */
+export const NetworkIdentitySchema = z.object({
+  /** Canonical form, prefix included: "AS13335". Renderers must not add another. */
+  asn: z.string().nullable(),
+  asnName: z.string().nullable(),
+  prefix: z.string().nullable(),
+  /** Country the *announced prefix* is registered in. */
+  country: z.string().nullable(),
+  /**
+   * Country the *autonomous system operator* is registered in.
+   *
+   * A different fact from `country` and worth having separately: a network
+   * registered to a company in one country routinely announces prefixes
+   * registered in several others. Where they disagree, that is information, not
+   * an error to be resolved by preferring one.
+   */
+  asnCountry: z.string().nullable().default(null),
+  registry: z.string().nullable(),
+  /** Derived from ASN against a bundled open mapping. */
+  cdnDetected: z.string().nullable(),
+});
+export type NetworkIdentity = z.infer<typeof NetworkIdentitySchema>;
+
+// ---------------------------------------------------------------------------
 // Per-address reachability (IPv4 and IPv6 measured separately)
 // ---------------------------------------------------------------------------
 
@@ -76,6 +106,25 @@ export const AddressEvidenceSchema = z.object({
   reachable: z.boolean(),
   tcpConnectMs: MetricSchema,
   error: z.string().nullable(),
+  /**
+   * Reverse DNS for this address, or null when the zone publishes none.
+   *
+   * Hosting providers name these after the facility — `ams`, `fra1`,
+   * `af-south-1` — which is often the only public clue about where a machine
+   * physically sits. It is a naming convention and nothing more, so it is
+   * treated as a hint rather than as a fact.
+   */
+  ptr: z.string().nullable().default(null),
+  /**
+   * Network identity for this specific address.
+   *
+   * `ServerEvidence.network` describes one address only — whichever answered
+   * first. That is the right summary for a single-homed site and actively
+   * misleading for a site whose addresses live on different networks, or in
+   * different countries, which is exactly the case somebody asking "where is
+   * this hosted" needs to see.
+   */
+  network: NetworkIdentitySchema.nullable().default(null),
 });
 export type AddressEvidence = z.infer<typeof AddressEvidenceSchema>;
 
@@ -94,6 +143,17 @@ export const CertificateSchema = z.object({
   hostnameMatches: z.boolean(),
   chainLength: z.int().nonnegative(),
   selfSigned: z.boolean(),
+  /**
+   * Structured identity from the certificate subject and issuer.
+   *
+   * Present only on organisation- and extended-validation certificates. A
+   * domain-validated certificate — which is most of them — proves control of a
+   * hostname and asserts nothing about who or where its owner is, so these being
+   * null is the normal case and says nothing about the site.
+   */
+  subjectCountry: z.string().nullable().default(null),
+  subjectOrg: z.string().nullable().default(null),
+  issuerCountry: z.string().nullable().default(null),
 });
 export type Certificate = z.infer<typeof CertificateSchema>;
 
@@ -170,18 +230,6 @@ export const StabilityEvidenceSchema = z.object({
 });
 export type StabilityEvidence = z.infer<typeof StabilityEvidenceSchema>;
 
-/** Sourced from Team Cymru's free DNS-based ASN service — no key, no account. */
-export const NetworkIdentitySchema = z.object({
-  asn: z.string().nullable(),
-  asnName: z.string().nullable(),
-  prefix: z.string().nullable(),
-  country: z.string().nullable(),
-  registry: z.string().nullable(),
-  /** Derived from ASN against a bundled open mapping. */
-  cdnDetected: z.string().nullable(),
-});
-export type NetworkIdentity = z.infer<typeof NetworkIdentitySchema>;
-
 // ---------------------------------------------------------------------------
 // Vantage points
 // ---------------------------------------------------------------------------
@@ -219,8 +267,51 @@ export type ThroughputEvidence = z.infer<typeof ThroughputEvidenceSchema>;
  */
 export const ClientEvidenceSchema = z.object({
   observedAt: z.iso.datetime(),
-  /** Vantage K: browser → our control endpoint. Characterises the user's link. */
+  /** Vantage K: browser → the control endpoint. Characterises the user's link. */
   control: SampleStatsSchema,
+  /**
+   * Which endpoint answered the control measurement. Null means same-origin.
+   *
+   * Provenance, not decoration: the same round-trip figure means something
+   * different depending on what produced it, and a reader cannot tell from the
+   * number alone. Defaulted so reports stored before this field parse unchanged.
+   */
+  controlOrigin: z.string().nullable().default(null),
+  /**
+   * Whether that endpoint was on this machine or this LAN.
+   *
+   * Determined by the browser from the address it actually measured, not guessed
+   * from how fast the answer came back. The latency heuristic that used to decide
+   * this alone is a heuristic: WebKit's loopback round trip measured 15 ms on a
+   * developer machine, sailed past the threshold, and the report announced
+   * "your connection is healthy" about a loopback interface — the exact false
+   * accusation the threshold exists to prevent.
+   *
+   * Defaulted false so evidence recorded before this field still parses; the
+   * latency check remains as a second line of defence.
+   */
+  controlIsLocal: z.boolean().default(false),
+  /**
+   * Whether the control endpoint is another instance of this app.
+   *
+   * `CONTROL_URL` may point at anything the browser can reach — the round trip is
+   * timed opaquely, so the far end grants nothing and need not know this tool
+   * exists. What that buys is a real baseline for the reader's own link on a
+   * local install, and it is genuinely useful for that.
+   *
+   * It is not a substitute in the path arithmetic, which subtracts this figure
+   * from the browser's time to the target. That subtraction assumes the two are
+   * comparable measurements. A large anycast endpoint answers from whichever edge
+   * is nearest the reader, by design, so the baseline comes out too small, the
+   * expected time too low, and the unexplained remainder — which the report
+   * attributes to the reader's provider — is inflated by ordinary distance to the
+   * target. Blaming an ISP for geography is the same class of error as blaming
+   * one for loopback.
+   *
+   * Defaulted true so evidence recorded before this field, which could only have
+   * come from a paired endpoint, still means what it meant.
+   */
+  controlIsPaired: z.boolean().default(true),
   /** Vantage T: browser → the target. Coarse; CORS hides the detail. */
   target: SampleStatsSchema,
   throughput: ThroughputEvidenceSchema.nullable(),

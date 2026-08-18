@@ -196,6 +196,8 @@ export const CheckPhaseSchema = z.enum([
   'stability',
   'network',
   'client',
+  /** Browser → target, and the excess the route cannot account for. */
+  'path',
 ]);
 export type CheckPhase = z.infer<typeof CheckPhaseSchema>;
 
@@ -207,6 +209,8 @@ export const CHECK_PHASE_ORDER: readonly CheckPhase[] = [
   'stability',
   'network',
   'client',
+  // Last: it is the only phase derived from the others rather than measured.
+  'path',
 ] as const;
 
 /**
@@ -284,7 +288,7 @@ export const VerdictSchema = z.object({
    *
    * Defaults to empty so reports stored before checks existed still parse and
    * render — they simply have no checks section. Reports are immutable and keep
-   * their rendered `summary_json`, so history is read in its original terms;
+   * their rendered `verdict_json`, so history is read in its original terms;
    * `engineVersion` is what tells you which terms those were.
    */
   checks: z.array(CheckSchema).default([]),

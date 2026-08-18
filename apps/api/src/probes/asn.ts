@@ -70,19 +70,23 @@ export function expandIpv6(address: string): string | null {
     .join('');
 }
 
+/** Every field null: nothing was learned, whatever the reason. */
+export const EMPTY_NETWORK: NetworkIdentity = {
+  asn: null,
+  asnName: null,
+  prefix: null,
+  country: null,
+  asnCountry: null,
+  registry: null,
+  cdnDetected: null,
+};
+
 export async function probeAsn(
   address: string,
   resolvers: readonly string[],
   timeoutMs = 4000,
 ): Promise<NetworkIdentity> {
-  const empty: NetworkIdentity = {
-    asn: null,
-    asnName: null,
-    prefix: null,
-    country: null,
-    registry: null,
-    cdnDetected: null,
-  };
+  const empty = EMPTY_NETWORK;
 
   const queryName = toQueryName(address);
   if (queryName === null) return empty;
@@ -97,14 +101,15 @@ export async function probeAsn(
     const [asn, prefix, country, registry] = record.split('|').map((part) => part.trim());
     if (asn === undefined || asn.length === 0) return empty;
 
-    // The ASN's human name lives in a second, separate zone.
-    const asnName = await lookupAsnName(resolver, asn);
+    // The operator's name and its own registered country live in a second zone.
+    const operator = await lookupOperator(resolver, asn);
 
     return {
       asn: `AS${asn}`,
-      asnName,
+      asnName: operator.name,
       prefix: prefix ?? null,
       country: country ?? null,
+      asnCountry: operator.country,
       registry: registry ?? null,
       cdnDetected: CDN_ASNS[asn] ?? null,
     };
@@ -115,15 +120,31 @@ export async function probeAsn(
   }
 }
 
-async function lookupAsnName(resolver: Resolver, asn: string): Promise<string | null> {
+/**
+ * The operator behind an AS number, and the country that operator is registered in.
+ *
+ * The country here is *not* the same fact as the one on the origin record. This
+ * one describes the organisation running the network; that one describes where
+ * the specific prefix is registered. A hosting company in one country announcing
+ * address space registered in another is entirely ordinary, and the two
+ * disagreeing is worth showing rather than resolving.
+ */
+async function lookupOperator(
+  resolver: Resolver,
+  asn: string,
+): Promise<{ name: string | null; country: string | null }> {
   try {
     const answer = await resolver.resolveTxt(`AS${asn}.asn.cymru.com`);
     const record = answer.flat().join('');
     // "13335 | US | arin | 2010-07-14 | CLOUDFLARENET, US"
     const parts = record.split('|').map((part) => part.trim());
+    const country = parts[1];
     const name = parts[4];
-    return name !== undefined && name.length > 0 ? name : null;
+    return {
+      name: name !== undefined && name.length > 0 ? name : null,
+      country: country !== undefined && country.length > 0 ? country : null,
+    };
   } catch {
-    return null;
+    return { name: null, country: null };
   }
 }

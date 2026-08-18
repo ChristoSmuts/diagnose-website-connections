@@ -57,6 +57,7 @@ function requestOnce(
   address: string,
   family: 4 | 6,
   timeoutMs: number,
+  overrides: Record<string, string> = {},
 ): Promise<RawResponse> {
   return new Promise((resolve, reject) => {
     const elapsed = stopwatch();
@@ -80,6 +81,7 @@ function requestOnce(
           accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
           'user-agent': 'dwc-diagnostics/1.0 (+website connection diagnostics)',
           connection: 'close',
+          ...overrides,
         },
       },
       (message) => {
@@ -272,6 +274,119 @@ export async function probeStability(
         ? unavailable('ms', 'only one sample succeeded, so there is nothing to compare against')
         : measured(warmMedian, 'ms'),
   };
+}
+
+/**
+ * One SSRF-guarded GET, returning the body rather than just measuring it.
+ *
+ * `probeHttp` counts bytes and throws the content away, because the diagnosis
+ * only cares how big the page is. Fetching a favicon needs the bytes themselves,
+ * and it must go through the same address validation and IP pinning — a site's
+ * icon URL is attacker-controlled input exactly like the site's URL is.
+ *
+ * Deliberately small: no redirect following beyond one hop, a hard byte cap, and
+ * null for anything that is not a plainly successful image response.
+ */
+export async function fetchSmallAsset(options: {
+  url: string;
+  maxBytes: number;
+  timeoutMs: number;
+  resolvers: readonly string[];
+}): Promise<{ contentType: string; body: Buffer } | null> {
+  const { maxBytes, timeoutMs, resolvers } = options;
+
+  let current: URL;
+  try {
+    current = new URL(options.url);
+  } catch {
+    return null;
+  }
+
+  /*
+   * A short redirect chain is normal for a favicon and worth following.
+   *
+   * Wikipedia takes two hops before it serves one — wikipedia.org to
+   * www.wikipedia.org to en.wikipedia.org — so a single-hop limit found nothing
+   * for one of the most obvious sites anyone would test. Still bounded, and every
+   * hop is resolved and validated afresh.
+   */
+  for (let hop = 0; hop < 4; hop += 1) {
+    if (current.protocol !== 'http:' && current.protocol !== 'https:') return null;
+
+    const safe = await resolveSafely(current.hostname.replace(/^\[|\]$/g, ''), resolvers);
+    const first = safe.addresses[0];
+    if (first === undefined) return null;
+
+    /*
+     * Identity encoding, unlike the page probe.
+     *
+     * The page probe asks for compression because whether a server offers it is
+     * part of the diagnosis. Here the bytes are the point, and asking for gzip
+     * meant the compressed stream went straight into a data URL — GitHub's icon
+     * was stored as base64 of a gzip member, which no browser will render.
+     */
+    const result = await requestOnce(current, first.address, first.family, timeoutMs, {
+      'accept-encoding': 'identity',
+      accept: 'image/*,*/*;q=0.8',
+    });
+
+    if (isRedirect(result.status)) {
+      const location = result.headers.location ?? null;
+      result.message.resume();
+      if (location === null) return null;
+      try {
+        current = new URL(location, current);
+      } catch {
+        return null;
+      }
+      continue;
+    }
+
+    if (result.status !== 200) {
+      result.message.resume();
+      return null;
+    }
+
+    // A server may compress regardless of what was asked. Better to have no icon
+    // than a data URL of a gzip member.
+    const encoding = (result.headers['content-encoding'] ?? 'identity').toLowerCase();
+    if (encoding !== 'identity' && encoding !== '') {
+      result.message.resume();
+      return null;
+    }
+
+    const body = await collectCapped(result.message, maxBytes);
+    if (body === null) return null;
+
+    return { contentType: (result.headers['content-type'] ?? '').split(';')[0]!.trim(), body };
+  }
+
+  return null;
+}
+
+/** Reads a whole small body, or gives up entirely once it exceeds the cap. */
+function collectCapped(message: IncomingMessage, maxBytes: number): Promise<Buffer | null> {
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    let total = 0;
+    let settled = false;
+
+    const finish = (value: Buffer | null): void => {
+      if (settled) return;
+      settled = true;
+      message.destroy();
+      resolve(value);
+    };
+
+    message.on('data', (chunk: Buffer) => {
+      total += chunk.length;
+      // A truncated image is worse than none: it would render as a broken glyph.
+      if (total > maxBytes) return finish(null);
+      chunks.push(chunk);
+    });
+    message.once('end', () => finish(Buffer.concat(chunks)));
+    message.once('error', () => finish(null));
+  });
 }
 
 export { errorMessage };

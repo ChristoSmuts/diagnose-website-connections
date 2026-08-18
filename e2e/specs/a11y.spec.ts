@@ -81,26 +81,71 @@ for (const theme of ['light', 'dark'] as const) {
 }
 
 test.describe('keyboard and focus', () => {
-  test('every interactive element in the empty state is reachable by keyboard', async ({
-    page,
-  }) => {
+  /**
+   * Walks the keyboard path a real user takes to the primary control.
+   *
+   * A fixed tab budget from the top of the document does not survive contact with
+   * a populated app: the sidebar precedes main in the DOM, so every saved site and
+   * every site action is a stop before the address field, and the count grows with
+   * use. The suite shares one database, so this test passed alone and failed after
+   * its neighbours had added sites — which is the same thing a real user hits, and
+   * the reason the skip link now exists.
+   */
+  test('the address field and its button are reachable from the main region', async ({ page }) => {
     await openApp(page);
 
+    // Take the route the skip link exists to provide, then walk from there.
+    await page.keyboard.press('Tab');
+    await page.keyboard.press('Enter');
+
     const reached: string[] = [];
-    for (let i = 0; i < 12; i += 1) {
+    for (let i = 0; i < 6; i += 1) {
       await page.keyboard.press('Tab');
-      const description = await page.evaluate(() => {
-        // Focus can land inside a shadow root, so walk activeElement down.
-        let el = document.activeElement;
-        while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
-        return el === null ? 'none' : `${el.tagName.toLowerCase()}`;
-      });
-      reached.push(description);
+      reached.push(
+        await page.evaluate(() => {
+          // Focus can land inside a shadow root, so walk activeElement down.
+          let el = document.activeElement;
+          while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+          return el === null ? 'none' : el.tagName.toLowerCase();
+        }),
+      );
     }
 
-    // The URL input and the run button must both be tab-reachable.
-    expect(reached).toContain('input');
-    expect(reached.some((t) => t === 'button')).toBe(true);
+    expect(reached, reached.join(' → ')).toContain('input');
+    expect(
+      reached.some((t) => t === 'button'),
+      reached.join(' → '),
+    ).toBe(true);
+  });
+
+  /**
+   * The sidebar comes before main in the DOM, so with a few saved sites a
+   * keyboard user tabs through every site and every site action before reaching
+   * the address field. The skip link is the way past — and it must be the very
+   * first stop, or it is no help at all.
+   */
+  test('the first tab stop skips straight to the main content', async ({ page }) => {
+    await openApp(page);
+    await runDiagnostic(page);
+    await page.reload();
+
+    await page.keyboard.press('Tab');
+
+    const first = await page.evaluate(() => {
+      let el = document.activeElement;
+      while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+      return el?.textContent?.trim() ?? '';
+    });
+    expect(first).toMatch(/skip to the main content/i);
+
+    await page.keyboard.press('Enter');
+
+    const landed = await page.evaluate(() => {
+      let el = document.activeElement;
+      while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+      return el?.tagName.toLowerCase() ?? '';
+    });
+    expect(landed).toBe('main');
   });
 
   test('focus is always visible, never removed by a restyle', async ({ page }) => {

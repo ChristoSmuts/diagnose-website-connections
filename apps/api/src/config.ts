@@ -43,11 +43,64 @@ export interface Config {
   limits: {
     maxRedirects: number;
     maxResponseBytes: number;
-    /** Probes per minute per client IP. */
+    /**
+     * Probes per minute per client IP.
+     *
+     * Scoped to POST /api/diagnose alone. This is the only route that opens
+     * outbound connections to a stranger-supplied address, so it is the only one
+     * where the abuse potential justifies a limit this tight. Applying it to
+     * reads as well meant an ordinary page reload could exhaust the budget meant
+     * for probes and surface as a generic failure.
+     */
     rateLimitPerMinute: number;
+    /** Every other route, per client IP. A backstop against a runaway client, not a probe limit. */
+    readsPerMinute: number;
   };
   corsOrigins: string[];
+  /**
+   * Where the browser measures its latency baseline, when it must not be here.
+   *
+   * The "your connection" and "the path between" vantages compare the browser's
+   * round trip to this service against its round trip to the target. Self-hosted
+   * on your own machine that baseline is loopback — 1-5ms, and no reflection of
+   * anyone's internet — so the engine correctly refuses to judge either.
+   *
+   * Point this at another instance of this app reachable across the internet and
+   * the browser measures against that instead, which gives both vantages a real
+   * baseline. Null, the default, means same-origin: the honest local behaviour of
+   * reporting "not measured" rather than a flattering number.
+   *
+   * The server never fetches this. Only the browser does, so it opens no SSRF
+   * surface here.
+   */
+  controlUrl: string | null;
   logLevel: string;
+}
+
+/**
+ * Validates CONTROL_URL at boot rather than letting the browser fail on it later.
+ *
+ * A typo here would otherwise surface as every client vantage silently reading
+ * "not measured", which is indistinguishable from the default local behaviour —
+ * exactly the sort of misconfiguration that costs an hour to spot.
+ */
+function controlOrigin(value: string | undefined): string | null {
+  if (value === undefined || value.trim() === '') return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new Error(`CONTROL_URL must be an absolute URL (got "${value}")`);
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`CONTROL_URL must be http or https (got "${parsed.protocol}")`);
+  }
+
+  // Stored as a bare origin: the browser appends /api/ping, and a trailing path
+  // or query on the configured value would produce a URL that 404s.
+  return parsed.origin;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -83,8 +136,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       maxRedirects: num(env.MAX_REDIRECTS, 10),
       maxResponseBytes: num(env.MAX_RESPONSE_BYTES, 5_000_000),
       rateLimitPerMinute: num(env.RATE_LIMIT_PER_MINUTE, 20),
+      readsPerMinute: num(env.READS_PER_MINUTE, 600),
     },
     corsOrigins: list(env.CORS_ORIGINS, ['http://localhost:5173', 'http://localhost:4173']),
+    controlUrl: controlOrigin(env.CONTROL_URL),
     logLevel: env.LOG_LEVEL ?? 'info',
   };
 }

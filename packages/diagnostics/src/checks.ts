@@ -13,16 +13,21 @@ import type {
   StabilityEvidence,
   TlsEvidence,
 } from '@dwc/contracts';
+import { countryLabel } from './countries.js';
 import { formatBytes, ms, plural } from './findings/helpers.js';
+import { describeLocation, distanceCeilingKm, KM_PER_MS, MAX_TERRESTRIAL_KM } from './location.js';
+import type { HostingLocation } from './location.js';
 import { instabilityRatio, lossRatio } from './stats.js';
 import {
   CERT_EXPIRY,
   LOCAL_CONTROL_RTT_MS,
   MIN_SAMPLES_FOR_VARIANCE,
+  controlIsLoopback,
   OUTDATED_TLS_PROTOCOLS,
   THRESHOLDS,
   classify,
 } from './thresholds.js';
+import { assessNetworkPath } from './vantages.js';
 
 /**
  * The complete record of what was examined — passes included.
@@ -95,8 +100,9 @@ export function buildChecks(evidence: Evidence, findings: readonly Finding[]): C
     ...tlsChecks(server.tls, server.target.scheme, link),
     ...httpChecks(server.http, link),
     ...stabilityChecks(server.stability, link),
-    ...networkChecks(server, link),
+    ...networkChecks(server, client, link),
     ...clientChecks(client, link),
+    ...pathChecks(evidence, link),
   ];
 }
 
@@ -1065,8 +1071,15 @@ Instability is scored as IQR ÷ median so it is scale-free: 50 ms of spread mean
 // Network identity
 // ---------------------------------------------------------------------------
 
-function networkChecks(server: ServerEvidence, link: Link): Check[] {
+function networkChecks(server: ServerEvidence, client: ClientEvidence | null, link: Link): Check[] {
   const n = server.network;
+  const certCountry = server.tls?.certificate?.subjectCountry ?? null;
+  const location = describeLocation({
+    network: n,
+    addresses: server.addresses,
+    http: server.http,
+    certCountry,
+  });
 
   return [
     check({
@@ -1074,11 +1087,13 @@ function networkChecks(server: ServerEvidence, link: Link): Check[] {
       phase: 'network',
       title: 'Network ownership',
       status: n.asn === null ? 'unavailable' : 'pass',
-      headline: n.asn === null ? null : `AS${n.asn}`,
+      // n.asn already carries its "AS" prefix. Adding another produced
+      // "ASAS13335" in the report for as long as this check has existed.
+      headline: n.asn,
       summary:
         n.asn === null
           ? 'The hosting network could not be identified.'
-          : `Hosted on ${n.asnName ?? `AS${n.asn}`}${n.country === null ? '' : ` (${n.country})`}.`,
+          : `Hosted on ${n.asnName ?? n.asn}${n.country === null ? '' : ` (${n.country})`}.`,
       technical:
         n.asn === null
           ? 'No autonomous system could be resolved for this address. The lookup uses Team Cymru’s free DNS-based service, which needs no key or account; a failure here is usually that service being unreachable rather than anything about the target.'
@@ -1086,16 +1101,45 @@ function networkChecks(server: ServerEvidence, link: Link): Check[] {
       evidence: [
         {
           label: 'ASN',
-          value: n.asn === null ? 'not identified' : `AS${n.asn}`,
+          value: n.asn ?? 'not identified',
           provenance: n.asn === null ? 'unavailable' : 'measured',
         },
-        { label: 'Operator', value: n.asnName ?? 'unknown' },
-        { label: 'Prefix', value: n.prefix ?? 'unknown' },
-        { label: 'Country', value: n.country ?? 'unknown' },
-        { label: 'Registry', value: n.registry ?? 'unknown' },
+        // Provenance is stated on every row rather than left to the default.
+        // These once defaulted to 'measured', so an unresolved lookup rendered
+        // the literal word "unknown" wearing a measured badge.
+        {
+          label: 'Operator',
+          value: n.asnName ?? 'unknown',
+          provenance: n.asnName === null ? 'unavailable' : 'measured',
+        },
+        {
+          label: 'Prefix',
+          value: n.prefix ?? 'unknown',
+          provenance: n.prefix === null ? 'unavailable' : 'measured',
+        },
+        {
+          label: 'Prefix registered in',
+          value: countryLabel(n.country) ?? 'unknown',
+          provenance: n.country === null ? 'unavailable' : 'measured',
+        },
+        {
+          label: 'Operator registered in',
+          value: countryLabel(n.asnCountry) ?? 'unknown',
+          provenance: n.asnCountry === null ? 'unavailable' : 'measured',
+        },
+        {
+          label: 'Registry',
+          value: n.registry ?? 'unknown',
+          provenance: n.registry === null ? 'unavailable' : 'measured',
+        },
       ],
       relatedFindings: link('origin-geographically-distant'),
     }),
+
+    locationCheck(location, link),
+    reverseDnsCheck(server, location),
+    certificateIdentityCheck(server),
+    distanceCheck(server, client, location),
 
     check({
       id: 'network.cdn',
@@ -1123,9 +1167,386 @@ function networkChecks(server: ServerEvidence, link: Link): Check[] {
   ];
 }
 
+/**
+ * The consolidated answer to "where is this served from", and the refusal of the
+ * question people actually tend to mean.
+ *
+ * The refusal is load-bearing. Somebody checking a supplier's site wants to know
+ * where their customers' data sits, and a country name printed beside a hostname
+ * will be read as answering that whether or not it was meant to. It does not. A
+ * probe sees the machine that answered a request; where a business stores,
+ * processes or backs up data is a contractual arrangement, and nothing on the
+ * wire reveals it.
+ */
+function locationCheck(location: HostingLocation, link: Link): Check {
+  const { pops, regions, countries, claims, behindEdge } = location;
+  const best = pops.find((p) => p.short !== null) ?? null;
+  const region = regions[0] ?? null;
+  const nothing = claims.length === 0;
+
+  const headline =
+    best?.place ??
+    region?.place ??
+    (countries.length === 1 ? countryLabel(countries[0] ?? null) : null);
+
+  const summary = nothing
+    ? 'Nothing we can see says where this is served from.'
+    : behindEdge
+      ? `Served from an edge${best === null ? '' : ` in ${best.place ?? best.code}`}, not from the origin.`
+      : countries.length > 1
+        ? `The available records disagree: ${countries.join(', ')}.`
+        : `Records point to ${headline ?? 'a network we could not place'}.`;
+
+  const limits =
+    'None of this establishes data residency. It describes the infrastructure that answered, not where a business keeps its records — an edge in one country routinely fronts an origin in a second holding a database in a third, and all three are ordinary. Treat it as a starting point for a question you then ask the operator, never as an answer to it.';
+
+  const technical = nothing
+    ? `No routing registry entry, edge header, reverse-DNS name or certificate field said anything about location. ${limits}`
+    : behindEdge
+      ? `Connections terminate at a content delivery network, so what is described here is the edge that answered — usually the one nearest our probe — and not the origin. The origin's location is not visible from outside, by design: that is what the network is for. Registry records still describe where the address block is registered, which for an anycast prefix is an administrative fact rather than a geographic one. ${limits}`
+      : `Assembled from independent records: which country the routing registry says the address block and its operator are registered in, any edge location the response headers named, any cloud region embedded in reverse DNS, and the certificate subject when it carries one. They are listed rather than reconciled, because where they differ that is itself the answer. ${limits}`;
+
+  return check({
+    id: 'network.location',
+    phase: 'network',
+    title: 'Where it is served from',
+    // Never a fault. Being hosted somewhere is not a problem, and a warn badge
+    // beside a country reads as an accusation about that country.
+    status: nothing ? 'unavailable' : 'pass',
+    /*
+     * Compact deliberately: this sits on a collapsed row beside a title and a
+     * chevron, and the full form is in the evidence directly below it.
+     *
+     * Behind a CDN with no edge header to read, this is deliberately empty. It
+     * used to fall through to the registry country, which put "United States"
+     * on the same line as a summary saying the origin was not visible from here
+     * — two statements that cannot both be what the reader takes away.
+     */
+    headline: behindEdge ? (best === null ? null : `edge in ${best.short ?? best.code}`) : headline,
+    summary,
+    technical,
+    evidence: [
+      ...pops.map((pop) => ({
+        label: `Edge location (${pop.source})`,
+        value: pop.place === null ? `${pop.code} — code not in our table` : pop.place,
+        provenance: 'inferred' as const,
+      })),
+      ...regions.map((r) => ({
+        label: 'Cloud region (reverse DNS)',
+        value: `${r.token} — ${r.place}`,
+        provenance: 'inferred' as const,
+      })),
+      ...claims.map((claim) => ({
+        label: `Country claimed by ${claim.source}`,
+        value: claim.label,
+        provenance: 'inferred' as const,
+      })),
+      {
+        label: 'Countries claimed in total',
+        value: countries.length === 0 ? 'none' : countries.join(', '),
+        provenance: countries.length === 0 ? ('unavailable' as const) : ('inferred' as const),
+      },
+    ],
+    relatedFindings: link('origin-geographically-distant'),
+  });
+}
+
+/**
+ * Reverse DNS, shown whole.
+ *
+ * Providers name these after the facility — `jnb51`, `af-south-1`, `drmrs` — and
+ * it is often the only public statement about where a machine physically sits.
+ * The whole name is printed rather than the fragment we managed to parse,
+ * because a reader who recognises their own provider's convention gets more out
+ * of it than any table of ours would.
+ */
+function reverseDnsCheck(server: ServerEvidence, location: HostingLocation): Check {
+  const { reverseNames } = location;
+  const answered = server.addresses.filter((a) => a.reachable);
+
+  const status: CheckStatus =
+    answered.length === 0 ? 'skipped' : reverseNames.length === 0 ? 'unavailable' : 'pass';
+
+  return check({
+    id: 'network.reverse-dns',
+    phase: 'network',
+    title: 'Reverse DNS',
+    status,
+    headline: reverseNames[0]?.ptr ?? null,
+    summary:
+      answered.length === 0
+        ? 'Not run: no address answered, so there was nothing to look up.'
+        : reverseNames.length === 0
+          ? 'No address published a reverse-DNS name.'
+          : `Named as ${reverseNames[0]?.ptr ?? ''}.`,
+    technical:
+      answered.length === 0
+        ? 'Not run: reverse DNS is looked up per reachable address, and none of them accepted a connection.'
+        : reverseNames.length === 0
+          ? 'The addresses have no PTR record, which is common and means nothing on its own. Large CDNs frequently publish none at all, and plenty of hosts simply never set one up.'
+          : 'A PTR record maps an address back to a name. Hosting providers conventionally encode the facility in it — an airport code, a cloud region, an internal site abbreviation — which makes it one of the few public clues about where a machine physically is. It is a naming convention and not a record of location: a provider is free to put anything there, and nothing verifies it.',
+    evidence:
+      reverseNames.length === 0
+        ? [{ label: 'PTR records', value: 'none published', provenance: 'unavailable' as const }]
+        : reverseNames.map((entry) => ({
+            label: entry.address,
+            value: entry.ptr,
+            provenance: 'measured' as const,
+          })),
+  });
+}
+
+/**
+ * What the certificate claims about who runs the site.
+ *
+ * Almost always skipped, and that is the honest outcome rather than a gap. A
+ * domain-validated certificate proves control of a hostname and deliberately
+ * asserts nothing about the organisation behind it, so there is no identity to
+ * read — which is different from having looked and found nothing.
+ */
+function certificateIdentityCheck(server: ServerEvidence): Check {
+  const cert = server.tls?.certificate ?? null;
+  const org = cert?.subjectOrg ?? null;
+  const country = cert?.subjectCountry ?? null;
+  const claims = org !== null || country !== null;
+
+  return check({
+    id: 'network.certificate-identity',
+    phase: 'network',
+    title: 'Certificate identity',
+    status: cert === null ? 'skipped' : claims ? 'pass' : 'skipped',
+    headline: org ?? countryLabel(country),
+    summary:
+      cert === null
+        ? 'Not run: this site was not reached over HTTPS.'
+        : claims
+          ? `The certificate names ${org ?? countryLabel(country) ?? 'an organisation'}.`
+          : 'Not run: the certificate is domain-validated and carries no organisation details.',
+    technical:
+      cert === null
+        ? 'Not run: there is no certificate to read on a plain HTTP connection.'
+        : claims
+          ? 'Organisation- and extended-validation certificates carry the subject organisation and country, which a certificate authority checked against company records before issuing. That makes it a verified claim about the operator — though about the legal entity, not about where any particular server or database sits.'
+          : 'Not run: this is a domain-validated certificate. It proves control of the hostname and asserts nothing about who or where the operator is, so there are no identity fields to read. Most certificates on the web are of this kind, so their absence says nothing about the site.',
+    evidence: [
+      {
+        label: 'Organisation',
+        value: org ?? 'not claimed',
+        provenance: org === null ? ('unavailable' as const) : ('measured' as const),
+      },
+      {
+        label: 'Country',
+        value: countryLabel(country) ?? 'not claimed',
+        provenance: country === null ? ('unavailable' as const) : ('measured' as const),
+      },
+      {
+        label: 'Issuer country',
+        value: countryLabel(cert?.issuerCountry ?? null) ?? 'unknown',
+        provenance:
+          (cert?.issuerCountry ?? null) === null ? ('unavailable' as const) : ('measured' as const),
+      },
+    ],
+  });
+}
+
+/**
+ * How far away the answering machine can possibly be.
+ *
+ * The only measured location signal in this whole phase, and the only one that
+ * can contradict a record rather than repeat one. Everything else here is
+ * somebody's assertion — a registry entry, a header, a naming convention. This is
+ * arithmetic on a number we timed ourselves.
+ *
+ * It gives a ceiling and never a position. Both vantages are reported separately
+ * because they are bounds from two different places, and the browser's is the one
+ * the reader can actually reason about: they know where they were sitting.
+ */
+function distanceCheck(
+  server: ServerEvidence,
+  client: ClientEvidence | null,
+  location: HostingLocation,
+): Check {
+  const completed = server.addresses
+    .map((a) => a.tcpConnectMs.value)
+    .filter((v): v is number => v !== null);
+  const fastest = completed.length === 0 ? null : Math.min(...completed);
+  const serverKm = fastest === null ? null : distanceCeilingKm(fastest);
+
+  const browserRtt = client?.target.median ?? null;
+  const browserKm = browserRtt === null ? null : distanceCeilingKm(browserRtt);
+
+  const km = (value: number): string => `${value.toLocaleString('en-GB')} km`;
+  const bounded = serverKm !== null || browserKm !== null;
+  const measuredAnything = fastest !== null || browserRtt !== null;
+
+  /*
+   * Three outcomes, and they are genuinely different facts:
+   *   nothing measured   — no round trip completed, so there is nothing to work from
+   *   measured, no bound — the reply was slower than a signal needs to cross the
+   *                        planet, so the ceiling excludes nowhere
+   *   measured, bounded  — a real constraint
+   * Collapsing the middle one into either neighbour would be a small lie.
+   */
+  const status: CheckStatus = !measuredAnything ? 'unavailable' : bounded ? 'pass' : 'unavailable';
+
+  const nearest = browserKm ?? serverKm;
+  const vantage = browserKm !== null ? 'you' : 'this instance';
+
+  return check({
+    id: 'network.distance',
+    phase: 'network',
+    title: 'Distance ceiling',
+    status,
+    headline: nearest === null ? null : `within ${km(nearest)}`,
+    summary: !measuredAnything
+      ? 'No round trip completed, so distance could not be bounded.'
+      : bounded
+        ? `Whatever answered is within ${km(nearest ?? 0)} of ${vantage}.`
+        : 'The reply was too slow to rule anywhere out.',
+    technical: `Light travels about 200 km through fibre every millisecond, and a round trip covers the distance twice — so a reply in ${ms(1)} puts the far end no further than ${km(KM_PER_MS)} away. Every real path bends, queues and waits at the far end, and all of that only adds time, so the true distance is always less than the figure here.\n\nThat one-sidedness is what makes it worth having: it can rule a location out, and it can never rule one in. A prefix registered in one country answering sooner than the speed of light allows from there is being served from somewhere else — ordinarily a content delivery network doing its job${location.behindEdge ? ', as it is here' : ''}. Beyond about ${km(MAX_TERRESTRIAL_KM)} the bound excludes nowhere on Earth and is reported as no constraint rather than as a number. The bound from our own server means something only to somebody who knows where this instance runs; the one from the browser is measured from wherever the reader was sitting.`,
+    evidence: [
+      {
+        label: 'From your browser',
+        value:
+          browserRtt === null
+            ? 'not measured'
+            : browserKm === null
+              ? 'no constraint — too slow to exclude anywhere'
+              : km(browserKm),
+        provenance: browserKm === null ? ('unavailable' as const) : ('inferred' as const),
+      },
+      {
+        label: 'From this instance',
+        value:
+          fastest === null
+            ? 'not measured'
+            : serverKm === null
+              ? 'no constraint — too slow to exclude anywhere'
+              : km(serverKm),
+        provenance: serverKm === null ? ('unavailable' as const) : ('inferred' as const),
+      },
+      {
+        label: 'Fastest round trip from this instance',
+        value: fastest === null ? 'none completed' : ms(fastest),
+        provenance: fastest === null ? ('unavailable' as const) : ('measured' as const),
+      },
+      {
+        label: 'Round trip from your browser',
+        value: browserRtt === null ? 'not measured' : ms(browserRtt),
+        provenance: browserRtt === null ? ('unavailable' as const) : ('measured' as const),
+      },
+    ],
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Client — only meaningful when the browser actually contributed evidence
 // ---------------------------------------------------------------------------
+
+/**
+ * The route between the reader and the site.
+ *
+ * This phase existed in the verdict but nowhere in the checks, so a report could
+ * say "not enough data to judge the route" with nothing anywhere explaining what
+ * was missing or why. A vantage that can be reported as unknown has to be able to
+ * account for itself.
+ *
+ * Nothing here is directly instrumented. The browser can time the target only
+ * coarsely — the request is cross-origin and opaque, so there are no sub-phase
+ * timings to read — and the excess is arithmetic on top of that. Both are marked
+ * accordingly rather than presented as observations.
+ */
+function pathChecks(evidence: Evidence, link: Link): Check[] {
+  const { server, client } = evidence;
+
+  if (client === null) {
+    return [
+      check({
+        id: 'path.target-latency',
+        phase: 'path',
+        title: 'The route to the site',
+        status: 'skipped',
+        summary: 'Not run: the route can only be timed from a browser.',
+        technical:
+          'Judging the route needs three numbers: how long the site takes to answer us, how long your connection takes to reach a known endpoint, and how long your browser takes to reach the site. Only the first was available here, so the route was not assessed at all rather than guessed at.',
+      }),
+    ];
+  }
+
+  const checks: Check[] = [];
+  const target = client.target.median;
+  const attempts = client.target.count + client.target.failed;
+
+  checks.push(
+    check({
+      id: 'path.target-latency',
+      phase: 'path',
+      title: 'Time for your browser to reach the site',
+      status: target === null ? 'unavailable' : 'pass',
+      headline: target === null ? null : ms(target),
+      summary:
+        target === null
+          ? `Ran, but every one of the ${plural(attempts, 'attempt')} failed, so the route could not be timed.`
+          : `Your browser reached the site in ${ms(target)}.`,
+      technical:
+        target === null
+          ? 'The browser could not complete a request to the site. Mixed content (an https page requesting http, or the reverse), a certificate the browser rejects, or an origin refusing the request will all produce this, and none of them are distinguishable from here: the response is opaque by design.'
+          : `Measured in the browser with a cross-origin request in no-cors mode. The response is opaque — no status, no headers, no sub-phase timings — so this is one wall-clock figure covering DNS, connection, TLS and the first byte together. It is deliberately coarse, and it is compared against, never reported as, a precise measurement.`,
+      evidence: [
+        { label: 'Attempts', value: String(attempts) },
+        {
+          label: 'Median',
+          value: target === null ? 'not measured' : ms(target),
+          provenance: target === null ? 'unavailable' : 'measured',
+        },
+        { label: 'Failed', value: String(client.target.failed) },
+        { label: 'Measured by', value: 'your browser' },
+      ],
+    }),
+  );
+
+  const path = assessNetworkPath(evidence);
+
+  checks.push(
+    check({
+      id: 'path.excess',
+      phase: 'path',
+      title: 'Time the route cannot account for',
+      status:
+        path.status === 'unknown'
+          ? 'unavailable'
+          : bandStatus(path.status === 'ok' ? 'ok' : path.status),
+      headline: path.excessMs === null ? null : ms(path.excessMs),
+      summary: path.status === 'unknown' ? path.summary : path.summary,
+      technical:
+        path.excessMs === null
+          ? "Not derivable. This needs your round trip to the control endpoint, the site's own response time, and your browser's time to reach the site. With any one missing there is nothing to subtract, and an estimate assembled from the rest would be invention rather than inference."
+          : `Derived, not observed. Your browser's time to reach the site, minus what the site's own response time and your connection's round trip already explain. What is left over is the route: peering, a long way round, or the absence of an edge near you.
+
+This is inferred and is reported as such throughout, which is also why confidence for a route verdict is capped below the level a directly measured one can reach.`,
+      evidence: [
+        {
+          label: 'Unexplained excess',
+          value: path.excessMs === null ? 'not derivable' : ms(path.excessMs),
+          provenance: path.excessMs === null ? 'unavailable' : 'inferred',
+        },
+        {
+          label: 'Your round trip',
+          value: client.control.median === null ? 'not measured' : ms(client.control.median),
+          provenance: client.control.median === null ? 'unavailable' : 'measured',
+        },
+        {
+          label: 'Site response time',
+          value: server.http?.ttfbMs.value == null ? 'not measured' : ms(server.http.ttfbMs.value),
+          provenance: server.http?.ttfbMs.value == null ? 'unavailable' : 'measured',
+        },
+      ],
+      relatedFindings: link('path-degraded'),
+    }),
+  );
+
+  return checks;
+}
 
 function clientChecks(client: ClientEvidence | null, link: Link): Check[] {
   if (client === null) {
@@ -1152,7 +1573,7 @@ function clientChecks(client: ClientEvidence | null, link: Link): Check[] {
    * endpoint answers in 1–5ms over loopback and looks flawless no matter how bad
    * the real link is. Reporting that as a healthy connection is a lie by omission.
    */
-  const loopback = rtt !== null && rtt < LOCAL_CONTROL_RTT_MS;
+  const loopback = controlIsLoopback(client);
 
   checks.push(
     check({
@@ -1167,7 +1588,7 @@ function clientChecks(client: ClientEvidence | null, link: Link): Check[] {
           ? 'Round-trip time could not be measured.'
           : `Round trip to our test endpoint took ${ms(rtt)}.`,
       technical: loopback
-        ? `The round trip completed in under ${String(LOCAL_CONTROL_RTT_MS)}ms, which is faster than any real internet path. The control endpoint is therefore on this machine or LAN, and the measurement describes a loopback interface rather than your internet connection.
+        ? `The round trip completed in under ${ms(LOCAL_CONTROL_RTT_MS)}, which is faster than any real internet path. The control endpoint is therefore on this machine or LAN, and the measurement describes a loopback interface rather than your internet connection.
 
 This is reported as not measurable rather than healthy on purpose. Treating it as healthy meant every genuine round trip looked like unexplained excess, and the engine confidently blamed the reader's provider for latency it had never measured.`
         : `Latency to our own endpoint, independent of the site being tested. This is the load-bearing measurement in the whole report: without a baseline for your connection there is no way to separate "that site is slow" from "your connection is slow", and any tool claiming to do so without one is guessing. Healthy is under ${String(THRESHOLDS.clientRttMs.ok)} ms.`,

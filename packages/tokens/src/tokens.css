@@ -228,7 +228,14 @@
      drift apart when this is written as a literal in each. */
   --dwc-header-height: 4rem;
 
+  /* Above everything, including the drawer: it is the first thing a keyboard user
+     meets and must never be covered by what it exists to skip past. */
+  --dwc-z-skip: 100;
+
   --dwc-sidebar-width: 19rem;
+  /* The collapsed sidebar. Wide enough for a 2.75rem tap target plus its padding,
+     so every control in the rail stays reachable rather than merely visible. */
+  --dwc-sidebar-rail: 3.5rem;
   --dwc-content-max: 56rem;
 }
 

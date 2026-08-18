@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { openApp, runDiagnostic, verdictHeadline } from '../support/app.js';
+import { openApp, openSidebar, runDiagnostic, verdictHeadline } from '../support/app.js';
 
 /**
  * The full lifecycle of stored sites and reports.
@@ -35,8 +35,11 @@ test.describe('sites and report history', () => {
     await openApp(page);
 
     // Expand the site to reveal its report list.
+    await openSidebar(page);
     await siteAction(page, 'Expand', SITE).click();
     const reportsBefore = await nav(page).getByRole('treeitem').count();
+
+    await openSidebar(page);
 
     await siteAction(page, 'Run a new check for', SITE).click();
     await expect(verdictHeadline(page)).not.toBeEmpty({ timeout: 75_000 });
@@ -51,6 +54,7 @@ test.describe('sites and report history', () => {
 
     // Rename uses a native prompt, which Playwright must answer explicitly.
     page.once('dialog', (dialog) => void dialog.accept(RENAMED));
+    await openSidebar(page);
     await siteAction(page, 'Rename', SITE).click();
 
     await expect(nav(page)).toContainText(RENAMED);
@@ -58,6 +62,8 @@ test.describe('sites and report history', () => {
 
   test('archiving moves the site out of the main tree', async ({ page }) => {
     await openApp(page);
+
+    await openSidebar(page);
 
     await siteAction(page, 'Archive', RENAMED).click();
 
@@ -70,9 +76,12 @@ test.describe('sites and report history', () => {
 
     // The archived view swaps what the sidebar lists rather than taking over the
     // main pane — archived items are moved out of the way, never hidden.
+    await openSidebar(page);
     await page.getByRole('button', { name: /view archived/i }).click();
     await expect(page.locator('.sidebar-title')).toHaveText(/archived/i);
     await expect(nav(page)).toContainText(RENAMED);
+
+    await openSidebar(page);
 
     await siteAction(page, 'Restore', RENAMED).click();
 
@@ -93,6 +102,8 @@ test.describe('sites and report history', () => {
   test('deleting asks for confirmation and then removes it for good', async ({ page }) => {
     await openApp(page);
 
+    await openSidebar(page);
+
     await siteAction(page, 'Delete', RENAMED).click();
 
     /*
@@ -110,6 +121,7 @@ test.describe('sites and report history', () => {
     await expect(nav(page)).not.toContainText(RENAMED);
 
     // Hard delete means it does not reappear in the archived view either.
+    await openSidebar(page);
     await page.getByRole('button', { name: /view archived/i }).click();
     await expect(page.locator('main')).not.toContainText(RENAMED);
   });

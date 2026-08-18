@@ -29,8 +29,26 @@ export const baseSheet = css`
     margin: -1px;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
+    /* Modern equivalent of 'clip', which is deprecated. Both are kept: the old
+       one for browsers that ignore clip-path, the new one because clip alone did
+       not stop the box below from contributing to scrollable overflow. */
+    clip-path: inset(50%);
     white-space: nowrap;
     border-width: 0;
+  }
+
+  /*
+   * Tables need the extra rule, and this was a real bug rather than pedantry.
+   *
+   * A table's used width has its min-content width as a floor, so 'width: 1px'
+   * was quietly ignored and the waterfall's hidden data table laid out at its
+   * natural 981px. Invisible, correctly, but still part of the document's
+   * scrollable area — which is what made every report scroll sideways on a phone.
+   * Fixed layout makes the declared width the used one.
+   */
+  table.sr-only {
+    table-layout: fixed;
+    max-width: 1px;
   }
 
   /* Every interactive element meets the minimum comfortable touch size, even

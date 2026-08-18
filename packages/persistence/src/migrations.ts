@@ -51,6 +51,23 @@ const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX reports_site_created_idx ON reports (site_id, created_at);
     `,
   },
+  {
+    version: 2,
+    name: 'site icons',
+    up: `
+      -- The site's own favicon, stored as a data URL.
+      --
+      -- Kept here rather than fetched by the browser on demand: a per-site request
+      -- from the page would leak every saved site to its origin on every load, and
+      -- a third-party favicon service would break the offline guarantee outright.
+      -- The server already fetches from these hosts under the SSRF guard, so it is
+      -- the right place to do it once and remember the answer.
+      ALTER TABLE sites ADD COLUMN icon_data_url TEXT;
+      -- Null means never attempted; a timestamp with a null icon means we tried
+      -- and there was nothing there, which stops us asking again on every run.
+      ALTER TABLE sites ADD COLUMN icon_fetched_at TEXT;
+    `,
+  },
 ];
 
 export function migrate(db: Database.Database): { from: number; to: number; applied: string[] } {

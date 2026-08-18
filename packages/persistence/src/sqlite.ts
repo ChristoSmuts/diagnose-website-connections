@@ -16,6 +16,7 @@ import { migrate } from './migrations.js';
 import {
   DuplicateSiteError,
   ImmutableReportError,
+  RunningReportError,
   type CreateReportInput,
   type CreateSiteInput,
   type Repositories,
@@ -45,6 +46,7 @@ function toSite(row: SiteRow): Site {
     label: row.label,
     tags: parseTags(row.tags),
     notes: row.notes,
+    iconDataUrl: row.iconDataUrl,
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -115,6 +117,8 @@ class SqliteSiteRepository implements SiteRepository {
       label: input.label,
       tags: JSON.stringify(input.tags),
       notes: null,
+      iconDataUrl: null,
+      iconFetchedAt: null,
       archivedAt: null,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -203,6 +207,31 @@ class SqliteSiteRepository implements SiteRepository {
     return this.findById(principalId, id);
   }
 
+  /**
+   * Records the outcome of an icon lookup, found or not.
+   *
+   * The timestamp is written either way: without it a site with no favicon would
+   * be re-fetched on every single run, which is a request to someone else's
+   * server for something we already know is not there.
+   */
+  setIcon(principalId: string, id: string, dataUrl: string | null): void {
+    this.db
+      .update(sites)
+      .set({ iconDataUrl: dataUrl, iconFetchedAt: this.now() })
+      .where(and(eq(sites.principalId, principalId), eq(sites.id, id)))
+      .run();
+  }
+
+  /** True when this site has never been looked up. */
+  needsIcon(principalId: string, id: string): boolean {
+    const row = this.db
+      .select()
+      .from(sites)
+      .where(and(eq(sites.principalId, principalId), eq(sites.id, id)))
+      .get();
+    return row !== undefined && row.iconFetchedAt === null;
+  }
+
   archive(principalId: string, id: string): Site | null {
     const timestamp = this.now();
     this.db
@@ -223,13 +252,32 @@ class SqliteSiteRepository implements SiteRepository {
   }
 
   restore(principalId: string, id: string): Site | null {
+    /*
+     * Restores only what archiving this site actually took with it.
+     *
+     * This used to clear archivedAt on every report for the site, which
+     * resurrected runs the user had archived individually — silent, and
+     * unrecoverable without noticing. Archiving stamps the cascade with the
+     * site's own timestamp and skips reports already archived, so a matching
+     * timestamp is what identifies the ones that came along for the ride.
+     */
+    const current = this.findById(principalId, id);
+    if (current === null) return null;
+    const cascadeStamp = current.archivedAt;
+
     this.db
       .update(sites)
       .set({ archivedAt: null, updatedAt: this.now() })
       .where(and(eq(sites.principalId, principalId), eq(sites.id, id)))
       .run();
 
-    this.db.update(reports).set({ archivedAt: null }).where(eq(reports.siteId, id)).run();
+    if (cascadeStamp !== null) {
+      this.db
+        .update(reports)
+        .set({ archivedAt: null })
+        .where(and(eq(reports.siteId, id), eq(reports.archivedAt, cascadeStamp)))
+        .run();
+    }
 
     return this.findById(principalId, id);
   }
@@ -356,7 +404,24 @@ class SqliteReportRepository implements ReportRepository {
     return result.changes > 0;
   }
 
+  /**
+   * Deletes a finished report. Refuses one that is still running.
+   *
+   * A running report has a diagnostic streaming into it. Deleting it mid-flight
+   * left `complete()` updating nothing and returning null, so the run finished
+   * against a row that no longer existed and failed silently. Refusing is both
+   * simpler than aborting the probe and easier to explain to whoever clicked it.
+   */
   hardDelete(principalId: string, id: string): boolean {
+    const row = this.db
+      .select()
+      .from(reports)
+      .where(and(eq(reports.principalId, principalId), eq(reports.id, id)))
+      .get();
+
+    if (row === undefined) return false;
+    if (row.status === 'running') throw new RunningReportError(id);
+
     const result = this.db
       .delete(reports)
       .where(and(eq(reports.principalId, principalId), eq(reports.id, id)))

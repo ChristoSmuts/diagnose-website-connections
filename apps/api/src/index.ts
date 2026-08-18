@@ -1,13 +1,22 @@
 import { loadConfig } from './config.ts';
+import { loadDotEnv } from './env.ts';
 import { buildServer } from './server.ts';
 
+// Loaded before loadConfig, which takes its snapshot of process.env at call time.
+const envFile = loadDotEnv();
 const config = loadConfig();
 const app = await buildServer({ config });
 
 try {
   await app.listen({ port: config.port, host: config.host });
   app.log.info(
-    { authMode: config.authMode, database: config.databasePath, resolvers: config.resolvers },
+    {
+      authMode: config.authMode,
+      database: config.databasePath,
+      resolvers: config.resolvers,
+      // Named so an operator who edited the wrong file can see which one applied.
+      envFile: envFile ?? 'none',
+    },
     'diagnostics engine ready',
   );
 } catch (error) {

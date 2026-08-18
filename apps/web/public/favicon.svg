@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Connection Diagnostics">
+  <!--
+    The header's brand mark, at favicon scale.
+
+    Phosphor's "route" glyph in duotone, on the same rounded tile the app uses.
+    Drawn rather than exported so the two cannot drift, and inline rather than
+    rasterised so it stays sharp at every size a browser asks for.
+
+    Theme-aware: a tab strip is dark in dark mode, and a mark tuned for a white
+    background disappears into it. Both palettes are defined here because a
+    favicon gets no stylesheet.
+  -->
+  <style>
+    :root { color-scheme: light dark; }
+    .tile { fill: #eef2fb; stroke: #b9c9ee; }
+    .glyph { fill: #2f5fbf; }
+    .behind { fill: #2f5fbf; opacity: 0.3; }
+    @media (prefers-color-scheme: dark) {
+      .tile { fill: #16203a; stroke: #2f4577; }
+      .glyph { fill: #86a9f2; }
+      .behind { fill: #86a9f2; opacity: 0.35; }
+    }
+  </style>
+
+  <rect class="tile" x="8" y="8" width="240" height="240" rx="56" stroke-width="10" />
+
+  <g transform="translate(128 128) scale(0.72) translate(-128 -128)">
+    <path class="behind" d="M224,200a24,24,0,1,1-24-24A24,24,0,0,1,224,200Z" />
+    <path class="glyph" d="M200,168a32.06,32.06,0,0,0-31,24H72a32,32,0,0,1,0-64h96a40,40,0,0,0,0-80H72a8,8,0,0,0,0,16h96a24,24,0,0,1,0,48H72a48,48,0,0,0,0,96h97a32,32,0,1,0,31-40Zm0,48a16,16,0,1,1,16-16A16,16,0,0,1,200,216Z" />
+  </g>
+</svg>

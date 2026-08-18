@@ -16,6 +16,24 @@ const CULPRIT_TONE: Record<Culprit, string> = {
 };
 
 /**
+ * A stable hue per site, so its monogram is the same colour every time.
+ *
+ * A plain sum of character codes rather than anything cryptographic: this only
+ * has to be deterministic and reasonably spread, and a site whose colour changed
+ * between visits would be worse than no colour at all.
+ */
+function hueFor(value: string): number {
+  let total = 0;
+  for (let i = 0; i < value.length; i += 1) total = (total + value.charCodeAt(i) * 17) % 360;
+  return total;
+}
+
+/** First letter or digit of the label, for the monogram. */
+function initialFor(label: string): string {
+  return /[a-z0-9]/i.exec(label)?.[0] ?? '?';
+}
+
+/**
  * Sites, with their report history nested beneath.
  *
  * The mental model is "my sites, and what happened to them over time", so sites
@@ -94,6 +112,78 @@ export class DwcNavTree extends LitElement {
         background: var(--dot);
       }
 
+      /*
+       * The site's own favicon, with a monogram behind it.
+       *
+       * The monogram is not a placeholder for a slow image — it is the answer for
+       * every site that has no favicon at all, which is a good many of them. Both
+       * are the same size and shape so the rail does not jump between the two.
+       */
+      .favicon {
+        position: relative;
+        width: 1.25rem;
+        height: 1.25rem;
+        flex: none;
+      }
+
+      /*
+       * The clip lives here rather than on .favicon, and that is the whole point
+       * of this element existing.
+       *
+       * A remote favicon can be any shape, so the artwork has to be clipped to a
+       * rounded square. The health dot below deliberately overhangs the corner.
+       * Both rules were once on .favicon, where the clip won: it sliced the flat
+       * right and bottom off the dot along with its entire ring, and the result
+       * read as an oval leaning right. One element cannot both clip its contents
+       * and let a child hang outside, so they are now two.
+       */
+      .favicon-art {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 100%;
+        border-radius: var(--dwc-radius-sm);
+        overflow: hidden;
+      }
+
+      .favicon img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      .monogram {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        border-radius: var(--dwc-radius-sm);
+        /* Hue from the hostname, so a site keeps the same colour every time and
+           two sites in a list are told apart at a glance. */
+        background: oklch(92% 0.05 var(--hue));
+        color: oklch(38% 0.11 var(--hue));
+        font-size: 0.625rem;
+        font-weight: var(--dwc-weight-semibold);
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      /*
+       * The health dot rides the corner of the icon rather than taking its own
+       * column, so the row keeps its width and the two read as one object.
+       *
+       * It keeps the base 0.5rem rather than the 0.4375rem it once had: seven
+       * pixels centred inside a 1.5px ring lands every edge on a half pixel, and
+       * fractional-DPR displays round those inconsistently — the circle comes out
+       * heavier on one side even with nothing clipping it.
+       */
+      .favicon .status-dot {
+        position: absolute;
+        right: -1px;
+        bottom: -1px;
+        box-shadow: 0 0 0 1.5px var(--dwc-surface-raised);
+      }
+
       .name {
         flex: 1;
         min-width: 0;
@@ -121,7 +211,10 @@ export class DwcNavTree extends LitElement {
         display: flex;
         align-items: center;
         gap: var(--dwc-space-2);
-        width: 100%;
+        /* Shares the row with its actions now, so it takes the remaining space
+           rather than the whole width. */
+        flex: 1;
+        min-width: 0;
         min-height: 2rem;
         padding: var(--dwc-space-1) var(--dwc-space-2);
         border: none;
@@ -164,8 +257,20 @@ export class DwcNavTree extends LitElement {
       /* Revealed on hover for pointer users, but always reachable by keyboard —
          opacity rather than display so focus is never trapped on a hidden node. */
       .site-row:hover .actions,
-      .site-row:focus-within .actions {
+      .site-row:focus-within .actions,
+      .report-row:hover .actions,
+      .report-row:focus-within .actions {
         opacity: 1;
+      }
+
+      .report-row {
+        display: flex;
+        align-items: center;
+        gap: var(--dwc-space-1);
+        border-radius: var(--dwc-radius);
+      }
+      .report-row:hover {
+        background: var(--dwc-surface-hover);
       }
 
       .action {
@@ -191,6 +296,38 @@ export class DwcNavTree extends LitElement {
         color: var(--dwc-text-subtle);
         text-align: center;
       }
+
+      /*
+       * Rail mode: the health dot survives, everything else goes.
+       *
+       * Hidden with 'display: none' rather than by clipping, deliberately. A
+       * label that is merely invisible is still a tab stop and still read aloud,
+       * which makes the rail worse for a keyboard user than the full sidebar
+       * rather than merely narrower.
+       */
+      :host([collapsed]) .name,
+      :host([collapsed]) .count,
+      :host([collapsed]) .actions,
+      :host([collapsed]) .disclosure,
+      :host([collapsed]) .reports,
+      :host([collapsed]) .empty {
+        display: none;
+      }
+      :host([collapsed]) .favicon {
+        width: 1.5rem;
+        height: 1.5rem;
+      }
+      :host([collapsed]) .site-button {
+        justify-content: center;
+        padding: var(--dwc-space-1);
+        /* A bare dot is a poor target. The row keeps a full-height hit area, and
+           the title attribute is what identifies the site on hover — its visible
+           name is gone, so the accessible name has to be explicit. */
+        min-height: var(--dwc-tap-target);
+      }
+      :host([collapsed]) .site-row {
+        justify-content: center;
+      }
     `,
   ];
 
@@ -206,8 +343,27 @@ export class DwcNavTree extends LitElement {
   @property({ type: String, attribute: 'selected-report' })
   accessor selectedReport: string | null = null;
 
+  /** Rail mode: reflected so the host-level style rules above can match on it. */
+  @property({ type: Boolean, reflect: true })
+  accessor collapsed = false;
+
+  /**
+   * Which list is being shown. Changing it collapses everything.
+   *
+   * Expansion state used to survive the switch between active and archived, so a
+   * site left open showed an empty history: the app clears its cache on the
+   * toggle, and nothing re-requested it because the disclosure never fired again.
+   * Collapsing is both the fix and the honest reading — it is a different list.
+   */
+  @property({ type: String })
+  accessor view: 'active' | 'archived' = 'active';
+
   @state()
   private accessor expanded = new Set<string>();
+
+  protected override willUpdate(changed: Map<string, unknown>): void {
+    if (changed.has('view') && changed.get('view') !== undefined) this.expanded = new Set();
+  }
 
   private toggle(siteId: string): void {
     const next = new Set(this.expanded);
@@ -257,9 +413,11 @@ export class DwcNavTree extends LitElement {
           <button
             class="site-button"
             type="button"
+            title=${site.label}
+            aria-label=${site.label}
             @click=${() => this.emit('site-select', { siteId: site.id })}
           >
-            <span class="status-dot" style="--dot: ${dot}" aria-hidden="true"></span>
+            ${this.renderFavicon(site, dot)}
             <span class="name">${site.label}</span>
             <span class="count">${site.reportCount}</span>
           </button>
@@ -328,21 +486,91 @@ export class DwcNavTree extends LitElement {
     `;
   }
 
+  /**
+   * The site's favicon, or a monogram when it has none.
+   *
+   * Decorative in both cases: the button already carries the site's name, so
+   * announcing the icon too would just repeat it. When the sidebar is collapsed
+   * this is the only thing left of the row, which is why it grows there — a bare
+   * status dot was a four-pixel target with nothing to identify it.
+   */
+  private renderFavicon(site: SiteWithSummary, dot: string): TemplateResult {
+    return html`
+      <span class="favicon" aria-hidden="true">
+        <span class="favicon-art">
+          ${
+            site.iconDataUrl === null
+              ? html`<span class="monogram" style="--hue: ${hueFor(site.url)}">
+                  ${initialFor(site.label)}
+                </span>`
+              : html`<img src=${site.iconDataUrl} alt="" loading="lazy" decoding="async" />`
+          }
+        </span>
+        <span class="status-dot" style="--dot: ${dot}"></span>
+      </span>
+    `;
+  }
+
   private renderReport(report: ReportSummary): TemplateResult {
     const tone = report.culprit === null ? 'unknown' : CULPRIT_TONE[report.culprit];
 
+    /*
+     * Every action names the run it belongs to, not just the verb.
+     *
+     * A history list produces five buttons in a row; labelling them all "Delete"
+     * leaves anyone using a screen reader or voice control with five identical
+     * targets and no way to say which one they mean.
+     */
+    const when = formatWhen(report.createdAt);
+    const archived = report.archivedAt !== null;
+
     return html`
       <li role="treeitem">
-        <button
-          class="report-button"
-          type="button"
-          aria-current=${this.selectedReport === report.id ? 'true' : 'false'}
-          @click=${() => this.emit('report-select', { reportId: report.id, siteId: report.siteId })}
-        >
-          <span class="status-dot" style="--dot: var(--dwc-${tone})" aria-hidden="true"></span>
-          <span class="when">${formatWhen(report.createdAt)}</span>
-          ${report.score === null ? nothing : html`<span class="score">${report.score}</span>`}
-        </button>
+        <div class="report-row">
+          <button
+            class="report-button"
+            type="button"
+            aria-current=${this.selectedReport === report.id ? 'true' : 'false'}
+            @click=${() =>
+              this.emit('report-select', { reportId: report.id, siteId: report.siteId })}
+          >
+            <span class="status-dot" style="--dot: var(--dwc-${tone})" aria-hidden="true"></span>
+            <span class="when">${when}</span>
+            ${report.score === null ? nothing : html`<span class="score">${report.score}</span>`}
+          </button>
+
+          <span class="actions">
+            <button
+              class="action"
+              type="button"
+              title=${archived ? `Restore the check from ${when}` : `Archive the check from ${when}`}
+              aria-label=${
+                archived ? `Restore the check from ${when}` : `Archive the check from ${when}`
+              }
+              @click=${() =>
+                this.emit(archived ? 'report-restore' : 'report-archive', {
+                  reportId: report.id,
+                  siteId: report.siteId,
+                })}
+            >
+              <dwc-icon name=${archived ? 'restore' : 'archive'}></dwc-icon>
+            </button>
+            <button
+              class="action"
+              type="button"
+              title="Delete the check from ${when}"
+              aria-label="Delete the check from ${when}"
+              @click=${() =>
+                this.emit('report-delete', {
+                  reportId: report.id,
+                  siteId: report.siteId,
+                  label: `the check from ${when}`,
+                })}
+            >
+              <dwc-icon name="trash"></dwc-icon>
+            </button>
+          </span>
+        </div>
       </li>
     `;
   }

@@ -2,7 +2,7 @@ import type { ClientEvidence, Evidence, ServerEvidence, VantageHealth } from '@d
 import { ms } from './findings/helpers.js';
 import { instabilityRatio, lossRatio } from './stats.js';
 import {
-  LOCAL_CONTROL_RTT_MS,
+  controlIsLoopback,
   MIN_SAMPLES_FOR_VARIANCE,
   PATH_DEGRADATION,
   THRESHOLDS,
@@ -186,12 +186,12 @@ export function assessUserConnection(client: ClientEvidence | null): VantageHeal
    * failing link would be told their connection is perfect. We have not measured
    * their internet at all, so we say so.
    */
-  if (client.control.median !== null && client.control.median < LOCAL_CONTROL_RTT_MS) {
+  if (controlIsLoopback(client)) {
     return {
       status: 'unknown',
       label: 'Your connection',
       summary:
-        'Not measured — this tool is running on your own machine, so there is no network between you and it to test.',
+        'Not measured — this tool is running on your own machine, so there is no network between you and it to test. Set CONTROL_URL to measure against an instance across the internet.',
       score: null,
     };
   }
@@ -224,15 +224,41 @@ export function assessUserConnection(client: ClientEvidence | null): VantageHeal
   };
 }
 
+/**
+ * Names the endpoint a round trip was measured against, when it was not us.
+ *
+ * "42 ms round trip" is a different claim depending on what answered, and the
+ * number alone cannot carry that. A reader comparing two reports deserves to
+ * know one was measured against a different machine.
+ */
+function against(client: ClientEvidence): string {
+  return client.controlOrigin === null ? '' : ` to ${hostOf(client.controlOrigin)}`;
+}
+
+/**
+ * The host part of an origin, without reaching for the URL global.
+ *
+ * This package is pure by rule — no I/O, no clock, no randomness — and leaning on
+ * an ambient platform global weakens that for the sake of trimming a scheme. The
+ * input is a validated origin from the API config, so there is no parsing to do
+ * beyond dropping the scheme and anything after the authority.
+ */
+function hostOf(origin: string): string {
+  const withoutScheme = origin.replace(/^[a-z][\w+.-]*:\/\//i, '');
+  const end = withoutScheme.search(/[/?#]/);
+  return end === -1 ? withoutScheme : withoutScheme.slice(0, end);
+}
+
 function describeClient(status: Band3 | 'unknown', client: ClientEvidence): string {
   const rtt = client.control.median;
+  const to = against(client);
   switch (status) {
     case 'ok':
-      return rtt === null ? 'Behaving normally.' : `Healthy (${ms(rtt)} round trip, steady).`;
+      return rtt === null ? 'Behaving normally.' : `Healthy (${ms(rtt)} round trip${to}, steady).`;
     case 'degraded':
-      return `A little slow or unsteady (${ms(rtt ?? 0)} round trip).`;
+      return `A little slow or unsteady (${ms(rtt ?? 0)} round trip${to}).`;
     case 'bad':
-      return `Slow or unreliable (${ms(rtt ?? 0)} round trip).`;
+      return `Slow or unreliable (${ms(rtt ?? 0)} round trip${to}).`;
     default:
       return 'Not measured.';
   }
@@ -277,12 +303,33 @@ export function assessNetworkPath(evidence: Evidence): VantageHealth & { excessM
 
   // A loopback control gives us no idea what the user's internet actually costs,
   // so there is nothing to subtract and no honest way to attribute the remainder.
-  if (userLatency < LOCAL_CONTROL_RTT_MS) {
+  if (controlIsLoopback(client)) {
     return {
       status: 'unknown',
       label: 'The path between',
       summary:
-        'Cannot be judged — this tool is running on your own machine, so there is no separate connection to compare against.',
+        'Cannot be judged — this tool is running on your own machine, so there is no separate connection to compare against. Set CONTROL_URL to measure against an instance across the internet.',
+      score: null,
+      excessMs: null,
+    };
+  }
+
+  /*
+   * An unpaired control endpoint measures the reader's link honestly and cannot
+   * be subtracted from their time to the target.
+   *
+   * The arithmetic below treats the baseline and the target measurement as
+   * comparable. They are not when the baseline came from an arbitrary endpoint:
+   * a large provider answers from whichever edge is nearest the reader, so the
+   * baseline is short by however far the target actually is, and the remainder
+   * this attributes to their provider is really the distance to the site.
+   */
+  if (!client.controlIsPaired) {
+    return {
+      status: 'unknown',
+      label: 'The path between',
+      summary:
+        'Cannot be judged — the baseline was measured against an endpoint that is not another instance of this tool, so there is nothing comparable to subtract. Point CONTROL_URL at a second instance to measure the route as well.',
       score: null,
       excessMs: null,
     };

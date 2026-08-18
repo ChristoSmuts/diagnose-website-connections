@@ -17,6 +17,10 @@ export const sites = sqliteTable(
     /** JSON array — SQLite has no array type and a join table is overkill here. */
     tags: text('tags').notNull().default('[]'),
     notes: text('notes'),
+    /** The site's own favicon as a data URL. Fetched by the server, never the page. */
+    iconDataUrl: text('icon_data_url'),
+    /** When we last looked. Set even when nothing was found, so we stop looking. */
+    iconFetchedAt: text('icon_fetched_at'),
     archivedAt: text('archived_at'),
     createdAt: text('created_at').notNull(),
     updatedAt: text('updated_at').notNull(),

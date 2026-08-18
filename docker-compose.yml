@@ -29,7 +29,17 @@ services:
       # traffic to the site being tested. Below 5, variance is treated as noise.
       STABILITY_SAMPLES: ${STABILITY_SAMPLES:-5}
 
+      # Diagnostics per minute per IP. Reads are counted separately and far more
+      # generously — this cap exists because probing opens outbound connections on
+      # a stranger's behalf, which reading a saved report does not.
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-20}
+      READS_PER_MINUTE: ${READS_PER_MINUTE:-600}
+
+      # Where the browser measures its latency baseline. Unset means same-origin,
+      # which on a local install is loopback — so "your connection" and "the path
+      # between" correctly report as not measured. Point this at another instance
+      # reachable across the internet to measure them for real. See the README.
+      CONTROL_URL: ${CONTROL_URL:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_PATH: /app/data/dwc.db
 

@@ -99,7 +99,47 @@ export const PATH_DEGRADATION = {
  * measured. Since a real internet path cannot realistically beat this, treating
  * it as "no usable baseline" is the honest reading.
  */
+/**
+ * Browser → target round trip above which distance becomes the explanation of
+ * last resort.
+ *
+ * Only ever applied together with two other facts: nothing is in front of the
+ * origin, and the route itself is not adding unexplained time. With a CDN ruled
+ * out and routing ruled out, what is left on a round trip this long is the
+ * length of the wire — 150 ms is comfortably intercontinental, and the existing
+ * `tcpMs` band already calls 100 ms "roughly intercontinental" from a
+ * well-connected server.
+ *
+ * A high round trip on its own proves nothing about distance: queueing, a busy
+ * server or a bad route all add time too. That is exactly why this is never the
+ * sole condition.
+ */
+export const DISTANT_ORIGIN_RTT_MS = 150;
+
 export const LOCAL_CONTROL_RTT_MS = 8;
+
+/**
+ * Whether the control measurement describes a local interface rather than a link.
+ *
+ * Two independent signals, and either is enough:
+ *
+ * 1. What the browser reported about the address it measured. This is a fact.
+ * 2. A round trip faster than any real internet path. This is an inference.
+ *
+ * The inference alone was not sufficient. It held for years on Chromium, where a
+ * loopback round trip is 1-3 ms, and failed on WebKit, where the same loopback
+ * measured 15 ms and was duly reported as a healthy internet connection. The fact
+ * is now primary and the inference is the backstop — it still catches a control
+ * endpoint reached through a local proxy or a container network, which the
+ * hostname check cannot see.
+ */
+export function controlIsLoopback(client: {
+  controlIsLocal?: boolean;
+  control: { median: number | null };
+}): boolean {
+  if (client.controlIsLocal === true) return true;
+  return client.control.median !== null && client.control.median < LOCAL_CONTROL_RTT_MS;
+}
 
 /**
  * Samples required before response-time variance may influence the verdict.

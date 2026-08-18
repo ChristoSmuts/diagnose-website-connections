@@ -50,7 +50,7 @@ In `packages/diagnostics/src/engine.ts`, stamped onto every verdict and stored w
 It does **not** need bumping for wording that carries the same meaning, or for anything in the UI.
 
 Why it is separate from the app version: reports are immutable and store their rendered
-`summary_json`, precisely so history reads in its original terms rather than being silently
+`verdict_json`, precisely so history reads in its original terms rather than being silently
 reinterpreted under thresholds that did not exist when it was taken. `ENGINE_VERSION` is what tells
 you _which_ terms those were. Without it, a stored report is undated evidence.
 

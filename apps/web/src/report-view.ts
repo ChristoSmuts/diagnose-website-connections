@@ -18,6 +18,7 @@ const PHASE_LABELS: Record<CheckPhase, string> = {
   stability: 'Consistency over several attempts',
   network: 'Where the site is hosted',
   client: 'Your own connection',
+  path: 'The route between you and the site',
 };
 
 /**

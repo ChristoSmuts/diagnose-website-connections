@@ -2,10 +2,11 @@ import type { DiagnosticEvent, ProbePhase, ServerEvidence } from '@dwc/contracts
 import { ms, plural } from '@dwc/diagnostics';
 import type { Config } from '../config.ts';
 import { normalizeUrl, resolveSafely } from '../safety/ssrf.ts';
-import { probeAsn } from './asn.ts';
+import { EMPTY_NETWORK, probeAsn } from './asn.ts';
 import { probeTcp, probeTls } from './connect.ts';
 import { probeDns } from './dns.ts';
 import { probeHttp, probeStability } from './http.ts';
+import { probePtr } from './ptr.ts';
 import { errorMessage } from './timing.ts';
 
 export type PhaseReporter = (
@@ -58,14 +59,7 @@ export async function runServerProbe(
     tls: null,
     http: null,
     stability: null,
-    network: {
-      asn: null,
-      asnName: null,
-      prefix: null,
-      country: null,
-      registry: null,
-      cdnDetected: null,
-    },
+    network: EMPTY_NETWORK,
     fatalError: null,
   };
 
@@ -152,7 +146,17 @@ export async function runServerProbe(
   report('stability', 'started', `Checking consistency over ${config.stabilitySamples} requests…`);
   report('network', 'started', 'Identifying who hosts this site…');
 
-  const [stability, network] = await Promise.all([
+  /*
+   * Identity is resolved for every address that answered, not just the first.
+   *
+   * A single-homed site gets the same answer either way. A site whose addresses
+   * sit on different networks — or in different countries — is exactly the case
+   * somebody asking "where is this hosted" needs to see, and looking at one
+   * address would quietly average it away.
+   */
+  const identified = base.addresses.filter((a) => a.reachable);
+
+  const [stability, perAddress] = await Promise.all([
     probeStability(
       target.normalizedUrl,
       reachable.address,
@@ -160,8 +164,26 @@ export async function runServerProbe(
       config.stabilitySamples,
       config.timeouts.httpMs,
     ),
-    probeAsn(reachable.address, config.resolvers),
+    Promise.all(
+      identified.map(async (entry) => {
+        const [network, ptr] = await Promise.all([
+          probeAsn(entry.address, config.resolvers),
+          probePtr(entry.address, config.resolvers),
+        ]);
+        return { address: entry.address, network, ptr };
+      }),
+    ),
   ]);
+
+  const byAddress = new Map(perAddress.map((entry) => [entry.address, entry]));
+  base.addresses = base.addresses.map((entry) => {
+    const found = byAddress.get(entry.address);
+    return found === undefined ? entry : { ...entry, network: found.network, ptr: found.ptr };
+  });
+
+  // Kept pointing at the address that answered first, so this stays the same
+  // summary it has always been for every report already stored.
+  const network = byAddress.get(reachable.address)?.network ?? EMPTY_NETWORK;
 
   base.stability = stability;
   base.network = network;

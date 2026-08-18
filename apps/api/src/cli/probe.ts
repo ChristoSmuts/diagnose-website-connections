@@ -8,8 +8,9 @@
  *   node src/cli/probe.ts example.com
  *   node src/cli/probe.ts https://example.com --json
  */
-import { analyse, formatBytes } from '@dwc/diagnostics';
+import { analyse, formatBytes, ms as duration } from '@dwc/diagnostics';
 import { loadConfig } from '../config.ts';
+import { loadDotEnv } from '../env.ts';
 import { runServerProbe } from '../probes/run.ts';
 
 const args = process.argv.slice(2);
@@ -21,6 +22,8 @@ if (url === undefined) {
   process.exit(1);
 }
 
+// Same .env as the server, so the CLI and the app never disagree about config.
+loadDotEnv();
 const config = loadConfig();
 
 const evidence = await runServerProbe(url, config, (phase, status, message) => {
@@ -36,8 +39,14 @@ if (asJson) {
   process.exit(0);
 }
 
+/*
+ * Wraps the engine's own formatter rather than repeating it. The local version
+ * printed "73ms", which breaks the spaced-unit rule the whole report follows —
+ * the same fault that reached the progress messages, and for the same reason:
+ * copy tests only ever see strings the engine produced.
+ */
 const ms = (n: number | null | undefined): string =>
-  n === null || n === undefined ? '—' : `${String(Math.round(n))}ms`;
+  n === null || n === undefined ? '—' : duration(n);
 
 console.log(`\n${'='.repeat(72)}`);
 console.log(`  ${verdict.headline}`);

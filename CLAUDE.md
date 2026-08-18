@@ -9,6 +9,7 @@ Read this before changing anything. Most of it is non-obvious and was learned th
 
 ```bash
 pnpm install
+cp .env.example .env  # optional; every variable is documented there
 pnpm run dev          # api on :8787, web on :5173 (proxied, same-origin)
 pnpm run verify       # format:check + lint + typecheck + test + build — what CI runs
 pnpm run lint         # eslint . (one pass from the root, NOT a Turbo task)
@@ -43,10 +44,17 @@ trustworthy about attribution.
 
 1. **Never blame what was not measured.** Without browser-side evidence the engine cannot conclude
    "your connection" or "the path", and it must not.
-2. **Loopback is not a connection.** Self-hosted on your own machine, the control endpoint answers in
-   ~3 ms over loopback. That says nothing about anyone's internet, so both client vantages report
-   _not measured_ rather than a flattering "healthy". `LOCAL_CONTROL_RTT_MS` is the threshold.
+2. **Loopback is not a connection.** Self-hosted on your own machine, the control endpoint answers over
+   loopback. That says nothing about anyone's internet, so both client vantages report _not measured_
+   rather than a flattering "healthy". Decided by `controlIsLoopback()`, which trusts the browser's
+   report of the address it measured (`controlIsLocal`) **first** and falls back to
+   `LOCAL_CONTROL_RTT_MS` only as a backstop. The threshold alone was not enough: WebKit's loopback
+   round trip measures ~15 ms, above the 8 ms line, and the report duly called it a healthy connection.
    Getting this wrong made the engine blame the reader's ISP for latency it had never measured.
+   `CONTROL_URL` is the supported way out — it points the browser at a control endpoint across the
+   internet — but it does **not** relax the threshold. A local `CONTROL_URL` is still refused, and
+   `controlOrigin` on the evidence records which endpoint answered, because the same round-trip figure
+   means something different depending on what produced it.
 3. **Provenance travels with every number** (`measured` | `inferred` | `unavailable`), structurally,
    so an inferred value cannot render as an observed one.
 4. **"Inconclusive" is a valid verdict.** Admitting ignorance beats inventing a culprit.
@@ -54,8 +62,28 @@ trustworthy about attribution.
    `packages/diagnostics/src/copy.test.ts`, which guards it now.
 6. **Variance needs ≥ `MIN_SAMPLES_FOR_VARIANCE` samples.** An IQR from three requests is noise, and
    treating it as signal produced "slow to respond (63 ms)" beside a health score of 96.
+7. **Location is not residency.** The `network` phase can say where the infrastructure that answered
+   appears to be. It can never say where a business stores, processes or backs up data — that is
+   contractual, and nothing on the wire reveals it. A country printed beside a hostname _will_ be read
+   as answering the residency question, so `network.location` refuses it in plain words rather than
+   trusting the reader to infer the limit. For the same reason there is no EU/UK/US grouping: a
+   jurisdiction label beside a hosting country reads as a compliance verdict the evidence cannot back.
+   Location signals are collected and never reconciled — `cloudflare.com` is registered in the US and
+   answers from Cape Town, both records are correct, and picking a winner would hide what anycast is.
+   Everything derived from a header, a PTR name or a registry record is `inferred` and names its source
+   in the row label; only round trips and addresses are `measured`.
 
 ## Constraints that will bite you
+
+### `.env` resolves from the module, not the working directory
+
+`pnpm dev` starts the API with cwd `apps/api`; the e2e harness starts the same file from the repo root.
+A cwd-relative path would therefore load in one and silently do nothing in the other, so
+`apps/api/src/env.ts` resolves the repo root from `import.meta.dirname`. Real environment variables win
+over the file — that is Node's own behaviour and the order operators expect. A missing `.env` is silent;
+anything else is rethrown, because a file that exists and cannot be read is somebody's configuration
+failing to apply. `.dockerignore` keeps it out of the image: Compose reads it on the host to interpolate
+`${VAR}`, and that is the only path into a container.
 
 ### Vite 8 / Oxc cannot lower decorators
 
@@ -157,7 +185,7 @@ produce a different verdict), and the SQLite `user_version` for migrations.
 ## Testing
 
 Reports are **immutable and append-only**. A re-run is a new row, never an edit, and each stores its
-rendered `summary_json` so an old report keeps saying what it said at the time.
+rendered `verdict_json` so an old report keeps saying what it said at the time.
 
 The most useful lesson from building this: **unit tests could not catch the class of bug that mattered
 most.** Every false accusation against a site owner or an ISP was found by running the real thing —

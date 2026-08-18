@@ -45,6 +45,103 @@ describe('never claims a number it did not measure', () => {
     expect(verdict.plain).not.toMatch(/\b[0-9]+ ms\b.*your (own )?connection/i);
   });
 
+  /**
+   * The loopback guard cannot rest on a latency threshold alone.
+   *
+   * This is the Phase 1 false accusation arriving through a door the threshold
+   * cannot watch. WebKit measured 15 ms to 127.0.0.1 on an ordinary developer
+   * machine — above LOCAL_CONTROL_RTT_MS — so the heuristic stayed quiet and the
+   * report said "Your connection: Healthy (15 ms round trip)" about a loopback
+   * interface. Found by the browser suite, not by any unit test, because no unit
+   * test had a reason to imagine a slow loopback.
+   */
+  it('refuses to judge a local control endpoint however slowly it answers', () => {
+    const verdict = analyse(scenarios.slowLoopback());
+
+    expect(verdict.vantages.userConnection.status).toBe('unknown');
+    expect(verdict.vantages.userConnection.summary).toMatch(/not measured/i);
+    expect(verdict.vantages.networkPath.status).toBe('unknown');
+
+    // The number itself must not appear anywhere a reader would take as a claim.
+    expect(verdict.plain).not.toMatch(/15 ms/);
+    expect(verdict.headline).not.toMatch(/15 ms/);
+    for (const finding of verdict.findings) {
+      expect(finding.code).not.toMatch(/^client-/);
+    }
+  });
+
+  /**
+   * The fact wins over the inference, not the other way round.
+   *
+   * A control endpoint reached through a local proxy can be slow, and a genuine
+   * internet endpoint can be fast. Only one of those two signals is a fact.
+   */
+  it('treats a fast round trip to a real endpoint as measured', () => {
+    const verdict = analyse(
+      makeEvidence({ clientRttSamples: [9, 10, 9, 11, 9], controlIsLocal: false }),
+    );
+
+    expect(verdict.vantages.userConnection.status).not.toBe('unknown');
+  });
+
+  /**
+   * CONTROL_URL must not become a way around the loopback rule.
+   *
+   * The setting exists so a local install can measure a real link. It would be a
+   * short step from there to treating any configured endpoint as trustworthy, and
+   * the guard has to key off what was actually measured rather than off intent.
+   */
+  it('still refuses to judge when the configured control endpoint is also local', () => {
+    const verdict = analyse(
+      makeEvidence({ clientRttSamples: [2, 3, 2], controlOrigin: 'http://localhost:8787' }),
+    );
+
+    expect(verdict.vantages.userConnection.status).toBe('unknown');
+    expect(verdict.vantages.networkPath.status).toBe('unknown');
+    expect(verdict.plain).not.toMatch(/round trip/i);
+  });
+
+  /**
+   * A figure measured against another machine is a different claim from one
+   * measured against the server that ran the probe, and the number alone cannot
+   * carry that difference.
+   */
+  it('names the endpoint when the baseline came from somewhere else', () => {
+    const verdict = analyse(scenarios.remoteControl());
+
+    expect(verdict.vantages.userConnection.status).not.toBe('unknown');
+    expect(verdict.vantages.userConnection.summary).toContain('control.example.net');
+  });
+
+  it('does not name an endpoint when the baseline was measured here', () => {
+    const verdict = analyse(scenarios.healthy());
+
+    expect(verdict.vantages.userConnection.summary).not.toMatch(/ to \S+\./);
+  });
+
+  /**
+   * The route phase has to account for itself.
+   *
+   * "Not enough data to judge the route" used to appear in the verdict with
+   * nothing in the checks explaining what was missing, because the phase had no
+   * checks at all.
+   */
+  it('explains an unjudgeable route in the checks, not only in the verdict', () => {
+    const verdict = analyse(scenarios.localInstall());
+    const path = verdict.checks.filter((c) => c.phase === 'path');
+
+    expect(path.length).toBeGreaterThan(0);
+    expect(path.every((c) => c.summary.length > 0)).toBe(true);
+    // Whatever it says, it must not present a derived figure as an observed one.
+    for (const check of path) {
+      for (const row of check.evidence) {
+        if (row.label === 'Unexplained excess') {
+          expect(row.provenance).not.toBe('measured');
+        }
+      }
+    }
+  });
+
   it('never mentions the reader’s connection at all on a server-only run', () => {
     const verdict = analyse(scenarios.serverOnly());
 

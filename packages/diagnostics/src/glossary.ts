@@ -73,6 +73,7 @@ const TERMS_BY_CODE: Partial<Record<Finding['code'], readonly string[]>> = {
   'client-low-throughput': ['Round trip'],
   'path-degraded': ['Round trip', 'CDN'],
   'no-cdn': ['CDN', 'ASN', 'Anycast'],
+  'origin-geographically-distant': ['Round trip', 'CDN'],
 };
 
 /** Only the terms actually used, alphabetised — never the whole dictionary. */

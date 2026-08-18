@@ -1,6 +1,13 @@
 import type { ClientEvidence, Evidence, Finding } from '@dwc/contracts';
+import { distanceCeilingKm } from '../location.js';
 import { lossRatio } from '../stats.js';
-import { LOCAL_CONTROL_RTT_MS, THRESHOLDS, classify, classifyInverted } from '../thresholds.js';
+import {
+  DISTANT_ORIGIN_RTT_MS,
+  THRESHOLDS,
+  classify,
+  classifyInverted,
+  controlIsLoopback,
+} from '../thresholds.js';
 import { finding, ms } from './helpers.js';
 
 /**
@@ -15,7 +22,7 @@ export function detectClientFindings(client: ClientEvidence | null): Finding[] {
 
   // Loopback control: nothing here describes the user's internet connection, so
   // raising findings about it would be inventing evidence. See assessUserConnection.
-  if (client.control.median !== null && client.control.median < LOCAL_CONTROL_RTT_MS) return [];
+  if (controlIsLoopback(client)) return [];
 
   const out: Finding[] = [];
 
@@ -161,7 +168,7 @@ export function detectPathFindings(evidence: Evidence, excessMs: number | null):
 
   // Loopback control means no usable baseline; assessNetworkPath already
   // returned unknown, so excessMs will be null and we never reach here.
-  if (client.control.median !== null && client.control.median < LOCAL_CONTROL_RTT_MS) return out;
+  if (controlIsLoopback(client)) return out;
 
   const userLatency = client.control.median ?? 0;
   const serverTime = server.http?.ttfbMs.value ?? 0;
@@ -170,9 +177,11 @@ export function detectPathFindings(evidence: Evidence, excessMs: number | null):
   // recomputing it differently here is how the two would silently disagree.
   const expected = actual - excessMs;
 
+  let pathDegraded = false;
   if (excessMs > 0 && actual > expected) {
     const ratio = expected > 0 ? actual / expected : 1;
     if (ratio >= 2 && excessMs >= 250) {
+      pathDegraded = true;
       out.push(
         finding({
           code: 'path-degraded',
@@ -200,6 +209,63 @@ export function detectPathFindings(evidence: Evidence, excessMs: number | null):
         }),
       );
     }
+  }
+
+  /*
+   * Distance as the explanation of last resort.
+   *
+   * Only reached once the two competing explanations are ruled out: a CDN would
+   * have put a copy near the reader, and a bad route would have shown up as
+   * unexplained excess above. What remains on a round trip this long is the
+   * length of the wire.
+   *
+   * Owner is nobody, deliberately. The distance itself is geography and nobody
+   * can shorten it; putting a CDN in front is a real fix, but that advice belongs
+   * to `no-cdn` below, which owns it. Two findings offering the same remediation
+   * would read as two problems.
+   */
+  const ceilingKm = distanceCeilingKm(actual);
+  if (
+    server.network.cdnDetected === null &&
+    actual >= DISTANT_ORIGIN_RTT_MS &&
+    !pathDegraded &&
+    server.network.asnName !== null
+  ) {
+    out.push(
+      finding({
+        code: 'origin-geographically-distant',
+        severity: 'info',
+        owner: 'nobody',
+        confidence: 'medium',
+        title: 'The site is a long way from you',
+        plain: `Reaching this site from your device takes about ${ms(actual)} for a round trip, and neither your connection nor the site's own speed accounts for it. It is served from one place, and that place is far away.`,
+        impact:
+          'Every request pays that distance again. Pages with many separate files feel it most, because the delay is repeated rather than shared.',
+        technical: `Round trip from the browser ${ms(actual)}, with no unexplained routing excess and no CDN detected in front of ${server.network.asnName}${server.network.country === null ? '' : ` (${server.network.country})`}. At roughly 200 km per millisecond through fibre, that round trip is consistent with a distance of up to ${ceilingKm === null ? 'anywhere on Earth' : `${ceilingKm.toLocaleString('en-GB')} km`} — an upper bound, not a position. Distance is inferred here by elimination rather than observed: latency can also be inflated by queueing or a slow route, which is why this is only reported once both have been ruled out.`,
+        evidence: [
+          { label: 'Round trip from your browser', value: ms(actual) },
+          {
+            label: 'Serving network',
+            value: server.network.asnName,
+            provenance: 'measured',
+          },
+          {
+            label: 'Furthest it could be',
+            value:
+              ceilingKm === null
+                ? 'unbounded — no constraint at this latency'
+                : `${ceilingKm.toLocaleString('en-GB')} km`,
+            provenance: ceilingKm === null ? 'unavailable' : 'inferred',
+          },
+        ],
+        remediation: {
+          summary: 'Nothing you can do about this directly — it is the distance.',
+          steps: [
+            'If the site matters to you regularly, its owner adding a content delivery network is the fix, and that is covered separately below.',
+          ],
+        },
+      }),
+    );
   }
 
   if (server.network.cdnDetected === null && server.network.asnName !== null) {

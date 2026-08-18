@@ -12,6 +12,16 @@ import { expect, type Locator, type Page } from '@playwright/test';
 /** A host reachable from CI and stable enough to assert a healthy verdict against. */
 export const HEALTHY_TARGET = 'example.com';
 
+/**
+ * A second stable host, for specs that need a site of their own.
+ *
+ * The suite deliberately shares one database so history accumulates the way it
+ * does in real use, but `history.spec` renames and then hard-deletes
+ * HEALTHY_TARGET's site. Any other spec counting that site's reports is racing
+ * it — which is exactly what happened, and only on the last project to run.
+ */
+export const SECOND_TARGET = 'example.net';
+
 export async function openApp(page: Page): Promise<void> {
   await page.goto('/');
   await expect(page.locator('dwc-url-input input')).toBeVisible();
@@ -41,6 +51,22 @@ export async function runDiagnostic(page: Page, target = HEALTHY_TARGET): Promis
   await page.locator('dwc-url-input input').fill(target);
   await page.locator('dwc-url-input input').press('Enter');
   await expect(verdictHeadline(page)).not.toBeEmpty({ timeout: 75_000 });
+}
+
+/**
+ * Opens the sidebar when it is a drawer, and does nothing when it is not.
+ *
+ * Below the desktop breakpoint the sidebar is off-canvas and inert, so anything
+ * inside it — site actions, report history — is genuinely unreachable until the
+ * drawer is opened. A spec that clicks straight into the tree passes on a desktop
+ * viewport and hangs on a phone, which is exactly what happened.
+ */
+export async function openSidebar(page: Page): Promise<void> {
+  const menu = page.locator('.menu-button');
+  if (!(await menu.isVisible())) return;
+  if ((await menu.getAttribute('aria-expanded')) === 'true') return;
+  await menu.click();
+  await expect(page.locator('aside[data-open="true"]')).toBeVisible();
 }
 
 export function verdictBanner(page: Page): Locator {

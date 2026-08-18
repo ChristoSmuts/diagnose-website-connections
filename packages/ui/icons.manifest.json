@@ -52,6 +52,7 @@
     "link": "link",
 
     "chevron": "caret-right",
+    "chevron-left": "caret-left",
     "chevron-down": "caret-down",
     "plus": "plus",
     "search": "magnifying-glass",

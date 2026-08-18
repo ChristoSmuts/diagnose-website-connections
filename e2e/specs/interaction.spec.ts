@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { HEALTHY_TARGET, openApp, verdictHeadline } from '../support/app.js';
+import { HEALTHY_TARGET, openApp, openSidebar, verdictHeadline } from '../support/app.js';
 
 /**
  * Two things a mouse does that a keyboard does not, both of which shipped broken.
@@ -59,6 +59,7 @@ test.describe('the confirmation dialog', () => {
 
     // Site actions carry explicit aria-labels, so the delete control is named
     // for the site it belongs to rather than being a bare "Delete".
+    await openSidebar(page);
     await page
       .locator('dwc-nav-tree')
       .getByRole('button', { name: new RegExp(`Delete ${HEALTHY_TARGET}`, 'i') })

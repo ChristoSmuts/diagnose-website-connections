@@ -22,6 +22,17 @@ export interface ScenarioOptions {
   clientRttSamples?: number[] | null;
   /** Browser → target timings. Defaults to a value consistent with the others. */
   clientTargetSamples?: number[];
+  /**
+   * Origin the control measurement was taken against. Null means same-origin.
+   *
+   * Set it to exercise a CONTROL_URL deployment, where the baseline comes from a
+   * different machine and the report has to say so.
+   */
+  controlOrigin?: string | null;
+  /** Whether the browser said the control endpoint was on this machine or LAN. */
+  controlIsLocal?: boolean;
+  /** False when CONTROL_URL points at something that is not another instance. */
+  controlIsPaired?: boolean;
   clientFailed?: number;
   downloadBps?: number | null;
   compression?: string | null;
@@ -36,6 +47,15 @@ export interface ScenarioOptions {
   cdn?: string | null;
   cacheControl?: string | null;
   transferredBytes?: number;
+  /** Reverse DNS for the IPv4 address. Null means the zone publishes none. */
+  ptr?: string | null;
+  /** The AS operator's own registered country, distinct from the prefix's. */
+  asnCountry?: string | null;
+  /** Certificate subject identity — null on a domain-validated cert, as usual. */
+  certCountry?: string | null;
+  certOrg?: string | null;
+  /** Extra response headers, for the edge-location signals. */
+  extraHeaders?: Record<string, string>;
 }
 
 export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
@@ -58,6 +78,11 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
     cdn = 'Cloudflare',
     cacheControl = 'public, max-age=3600',
     transferredBytes = 45_000,
+    ptr = null,
+    asnCountry = 'US',
+    certCountry = null,
+    certOrg = null,
+    extraHeaders = {},
   } = opts;
 
   const samples = ttfbSamples ?? [
@@ -116,6 +141,8 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
         tcpConnectMs:
           fatalError === null ? measured(tcpMs, 'ms') : unavailable('ms', 'connection failed'),
         error: fatalError,
+        ptr,
+        network: null,
       },
       ...(ipv6Reachable === null
         ? []
@@ -128,6 +155,8 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
                 ? measured(tcpMs + 5, 'ms')
                 : unavailable('ms', 'IPv6 connection failed'),
               error: ipv6Reachable ? null : 'ETIMEDOUT',
+              ptr: null,
+              network: null,
             },
           ]),
     ],
@@ -150,6 +179,9 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
               hostnameMatches,
               chainLength: 2,
               selfSigned: false,
+              subjectCountry: certCountry,
+              subjectOrg: certOrg,
+              issuerCountry: 'US',
             },
             ocspStapled: true,
             resumedHandshakeMs: measured(tlsMs * 0.4, 'ms'),
@@ -183,7 +215,7 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
             hsts: true,
             contentSecurityPolicy: true,
             timingAllowOrigin: false,
-            headers: { server: 'nginx' },
+            headers: { server: 'nginx', ...extraHeaders },
           },
     stability:
       fatalError !== null
@@ -198,6 +230,7 @@ export function makeServerEvidence(opts: ScenarioOptions = {}): ServerEvidence {
       asnName: 'CLOUDFLARENET',
       prefix: '93.184.216.0/24',
       country: 'US',
+      asnCountry,
       registry: 'arin',
       cdnDetected: cdn,
     },
@@ -211,6 +244,9 @@ export function makeClientEvidence(opts: ScenarioOptions = {}): ClientEvidence |
     clientTargetSamples,
     clientFailed = 0,
     downloadBps = 12_000_000,
+    controlOrigin = null,
+    controlIsLocal = false,
+    controlIsPaired = true,
   } = opts;
 
   if (clientRttSamples === null) return null;
@@ -223,6 +259,9 @@ export function makeClientEvidence(opts: ScenarioOptions = {}): ClientEvidence |
   return {
     observedAt: '2026-08-17T12:00:05.000Z',
     control: computeStats(control, clientFailed, 'ms'),
+    controlOrigin,
+    controlIsLocal,
+    controlIsPaired,
     target: computeStats(target, 0, 'ms'),
     throughput:
       downloadBps === null
@@ -284,4 +323,111 @@ export const scenarios = {
   /** Erratic rather than uniformly slow. */
   unstable: (): Evidence =>
     makeEvidence({ ttfbMs: 300, ttfbSamples: [90, 850, 120, 1400, 110, 980, 130] }),
+
+  /**
+   * Self-hosted on the reader's own machine: the control endpoint is loopback.
+   *
+   * The most important scenario in this file. Every client-side round trip comes
+   * back in single-digit milliseconds, which describes no internet connection at
+   * all, and the engine must refuse to judge either client vantage rather than
+   * reporting a flattering number it never measured.
+   */
+  localInstall: (): Evidence =>
+    makeEvidence({
+      clientRttSamples: [2, 3, 2, 3, 2],
+      clientTargetSamples: [95, 98, 92, 99, 94],
+      controlIsLocal: true,
+    }),
+
+  /**
+   * Local, but with a loopback round trip slow enough to look like a real link.
+   *
+   * Not hypothetical: WebKit measured 15 ms to 127.0.0.1 on an ordinary developer
+   * machine. That is above LOCAL_CONTROL_RTT_MS, so the latency heuristic did not
+   * fire and the report announced "Your connection: Healthy (15 ms round trip)"
+   * about a loopback interface — the precise false accusation the threshold was
+   * added to prevent, arriving through a door the threshold cannot watch.
+   */
+  slowLoopback: (): Evidence =>
+    makeEvidence({
+      clientRttSamples: [15, 16, 14, 17, 15],
+      clientTargetSamples: [95, 98, 92, 99, 94],
+      controlIsLocal: true,
+    }),
+
+  /**
+   * Self-hosted, but with CONTROL_URL pointed at an instance across the internet.
+   *
+   * The baseline is real, so both client vantages become answerable — and the
+   * report has to say which endpoint produced the figure, because the same number
+   * from a different machine is a different claim.
+   */
+  remoteControl: (): Evidence =>
+    makeEvidence({
+      clientRttSamples: [38, 41, 36, 40, 39],
+      controlOrigin: 'https://control.example.net',
+    }),
+
+  /**
+   * CONTROL_URL pointed at something that is not another instance.
+   *
+   * A public endpoint answers the round trip perfectly well, so "your connection"
+   * becomes answerable on a local install. The path does not: subtracting a
+   * baseline measured against a nearby anycast edge from the time to a distant
+   * target manufactures excess out of ordinary geography.
+   */
+  unpairedControl: (): Evidence =>
+    makeEvidence({
+      clientRttSamples: [22, 24, 21, 23, 22],
+      controlOrigin: 'https://www.google.com',
+      controlIsPaired: false,
+    }),
+  /**
+   * Behind an anycast CDN edge, with the registry pointing somewhere else.
+   *
+   * The ordinary case for most of the web, and the one the location checks have
+   * to get right: the prefix is registered in the United States, the edge that
+   * answered is in Cape Town, and neither record is wrong. Reconciling them would
+   * be the mistake.
+   */
+  anycastEdge: (): Evidence =>
+    makeEvidence({
+      cdn: 'Cloudflare',
+      tcpMs: 14,
+      extraHeaders: { 'cf-ray': 'a2d1207049284193-CPT', server: 'cloudflare' },
+    }),
+
+  /**
+   * One origin, reached directly, with reverse DNS naming a cloud region.
+   */
+  directOrigin: (): Evidence =>
+    makeEvidence({
+      cdn: null,
+      tcpMs: 30,
+      ptr: 'ec2-13-244-1-1.af-south-1.compute.amazonaws.com',
+      asnCountry: 'ZA',
+    }),
+
+  /**
+   * Far from the reader, nothing in front of it, and the route itself is fine.
+   *
+   * The only shape in which distance is a defensible conclusion rather than a
+   * guess: a CDN would have put a copy nearby, and a bad route would have shown
+   * up as unexplained excess.
+   */
+  distantOrigin: (): Evidence =>
+    makeEvidence({
+      cdn: null,
+      tcpMs: 190,
+      ttfbMs: 120,
+      clientRttSamples: [30, 32, 29, 31, 30],
+      clientTargetSamples: [330, 335, 328, 332, 331],
+    }),
+
+  /** An organisation-validated certificate, which does carry an identity. */
+  organisationCert: (): Evidence =>
+    makeEvidence({
+      certCountry: 'ZA',
+      certOrg: 'Example Holdings (Pty) Ltd',
+    }),
 };
