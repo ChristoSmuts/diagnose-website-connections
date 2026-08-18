@@ -146,11 +146,32 @@ export class DwcButton extends LitElement {
   @property({ type: String, attribute: 'aria-label' })
   accessor ariaLabelText: string | null = null;
 
+  /**
+   * Submits the containing form, because the browser will not.
+   *
+   * Form association does not cross a shadow boundary: the real `<button>` lives
+   * in this element's shadow root, so it is not associated with a `<form>` in the
+   * tree outside and clicking it does nothing at all. Pressing Enter in a text
+   * field still works, since that is implicit submission on the form itself —
+   * which is exactly how `type="submit"` came to look functional while the
+   * primary call to action was dead to the mouse.
+   *
+   * `closest()` stops at the shadow root, so this finds a form in the same tree
+   * as the `<dwc-button>` — light DOM or another component's shadow root alike.
+   * `requestSubmit()` rather than `submit()`: it fires the `submit` event, which
+   * is what every consumer here listens for.
+   */
+  private forwardSubmit(): void {
+    if (this.type !== 'submit' || this.disabled || this.loading) return;
+    this.closest('form')?.requestSubmit();
+  }
+
   override render(): TemplateResult {
     return html`
       <button
         class=${this.variant}
         type=${this.type}
+        @click=${this.forwardSubmit}
         ?disabled=${this.disabled || this.loading}
         aria-label=${this.ariaLabelText ?? undefined}
         aria-busy=${this.loading ? 'true' : 'false'}

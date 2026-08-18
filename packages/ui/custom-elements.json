@@ -382,6 +382,17 @@
               "default": "null",
               "description": "Required when the button's only content is an icon.",
               "attribute": "aria-label"
+            },
+            {
+              "kind": "method",
+              "name": "forwardSubmit",
+              "privacy": "private",
+              "return": {
+                "type": {
+                  "text": "void"
+                }
+              },
+              "description": "Submits the containing form, because the browser will not.\n\nForm association does not cross a shadow boundary: the real `<button>` lives\nin this element's shadow root, so it is not associated with a `<form>` in the\ntree outside and clicking it does nothing at all. Pressing Enter in a text\nfield still works, since that is implicit submission on the form itself —\nwhich is exactly how `type=\"submit\"` came to look functional while the\nprimary call to action was dead to the mouse.\n\n`closest()` stops at the shadow root, so this finds a form in the same tree\nas the `<dwc-button>` — light DOM or another component's shadow root alike.\n`requestSubmit()` rather than `submit()`: it fires the `submit` event, which\nis what every consumer here listens for."
             }
           ],
           "attributes": [

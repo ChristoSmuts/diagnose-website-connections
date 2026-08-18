@@ -17,6 +17,13 @@ export class DwcDialog extends LitElement {
     ...sharedStyles,
     css`
       dialog {
+        /* Restores the centring the UA stylesheet gives a modal dialog through
+           'margin: auto' against 'inset: 0'. Tailwind's preflight resets margin
+           to 0 on every element, and the compiled sheet is adopted into this
+           shadow root — so the dialog collapsed into the top-left corner. Nothing
+           in this component's own CSS looked wrong, which is why reading it never
+           found the cause. */
+        margin: auto;
         width: min(28rem, calc(100vw - 2rem));
         padding: 0;
         border: 1px solid var(--dwc-border);
