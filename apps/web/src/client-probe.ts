@@ -26,6 +26,11 @@ export interface ClientProbeOptions {
    * CONTROL_URL in the API config.
    */
   controlUrl?: string | null;
+  /**
+   * Public endpoints to time alongside the target, establishing the reader's
+   * floor. Empty unless the operator opted in — these are third parties.
+   */
+  referenceUrls?: readonly string[];
   /** Users must opt in — a throughput test spends their data. */
   throughputConsent: boolean;
   /** Progress callback for the UI. */
@@ -34,6 +39,11 @@ export interface ClientProbeOptions {
 }
 
 const LATENCY_SAMPLES = 12;
+/**
+ * Fewer than the control gets. A reference only has to establish a floor, and
+ * every sample is a request to somebody else's server on the reader's behalf.
+ */
+const REFERENCE_SAMPLES = 5;
 const LATENCY_TIMEOUT_MS = 4000;
 /** Hard cap on the throughput test. Deliberately modest: it is not a speed test. */
 const THROUGHPUT_BYTES = 4_000_000;
@@ -47,21 +57,38 @@ export async function runClientProbe(options: ClientProbeOptions): Promise<Clien
   onProgress('Measuring your connection…');
 
   /*
-   * Same-origin is always a paired instance. A configured one has to prove it,
-   * by answering a readable request at /api/ping.
+   * Ask the control endpoint what it is before measuring against it.
    *
-   * Only a paired instance gets the readable measurement and unlocks the path
-   * verdict. Anything else — a search engine, a public 204 endpoint, whatever
-   * the operator pointed us at — is timed opaquely, which needs no cooperation
-   * at all but measures a different thing.
+   * Two facts come back from one request. Whether it is another instance of this
+   * app — only an instance answers a readable /api/health — which decides
+   * whether the round trip can be measured properly or only timed opaquely. And
+   * whether the reader's connection to it ended at a CDN edge, which the browser
+   * cannot possibly work out for itself: from out here a CDN-fronted instance
+   * and a directly-reachable one are indistinguishable.
    */
-  const paired = controlOrigin === null || (await probePairedControl(controlOrigin, signal));
-  const control = paired
+  const identity = await probeControl(controlOrigin, signal);
+  const control = identity.paired
     ? await measureLatency(`${controlOrigin ?? ''}/api/ping`, LATENCY_SAMPLES, signal)
     : await measureOpaqueLatency(controlOrigin ?? '', LATENCY_SAMPLES, signal);
 
   onProgress('Measuring the route to this site…');
   const target = await measureTarget(options.targetUrl, signal);
+
+  /*
+   * Reference endpoints, timed the same opaque way as the target.
+   *
+   * Sequential rather than concurrent, and for the same reason the latency
+   * samples are: running them together would measure the browser's connection
+   * limit rather than the network. Anything unreachable simply contributes no
+   * samples, which the engine reads as "no floor established" rather than as a
+   * slow one.
+   */
+  const references: ClientEvidence['references'] = [];
+  for (const origin of options.referenceUrls ?? []) {
+    if (signal?.aborted === true) break;
+    const stats = await measureOpaqueLatency(origin, REFERENCE_SAMPLES, signal);
+    if (stats.median !== null) references.push({ origin, stats });
+  }
 
   let throughput: ClientEvidence['throughput'] = null;
   if (options.throughputConsent) {
@@ -101,7 +128,22 @@ export async function runClientProbe(options: ClientProbeOptions): Promise<Clien
      * distance. So an unpaired control still characterises the reader's own link,
      * and the path stays unmeasured.
      */
-    controlIsPaired: paired,
+    controlIsPaired: identity.paired,
+    /*
+     * Whether that endpoint answered from an edge rather than from itself.
+     *
+     * Reported by the endpoint, not inferred here. It leaves "your connection"
+     * alone — an edge round trip still describes the last mile honestly — and
+     * stops the route verdict subtracting a baseline that is too short.
+     */
+    controlIsEdgeTerminated: identity.edgeTerminated,
+    /*
+     * The throughput test always fetches from this page's own origin, so it
+     * measures loopback on a local install even when CONTROL_URL is remote.
+     * Recorded separately for that reason.
+     */
+    appIsLocal: isLocalHost(null),
+    references,
     target,
     throughput,
     connectionHint: readConnectionHint(),
@@ -310,30 +352,36 @@ function readConnectionHint(): ClientEvidence['connectionHint'] {
 }
 
 /**
- * Whether the control endpoint is another instance of this app.
+ * What the control endpoint is, asked rather than assumed.
  *
- * Same-origin always is. A configured origin is only assumed to be one if its
- * `/api/ping` answers a readable, CORS-permitted request — which nothing but an
- * instance of this app will do.
+ * `/api/health` is the only endpoint that answers both questions at once, and it
+ * is unauthenticated and rate-limit exempt precisely so a paired instance can be
+ * asked by a browser that holds no session with it.
  *
- * The distinction decides how much of the report is allowed to run, so it is
- * established by asking rather than by pattern-matching the URL.
+ * A CORS rejection, a 404 or an unreachable host all land in the same place and
+ * all mean the same thing: not an instance of this app. Same-origin is an
+ * instance by definition, but still has to be asked about the edge.
  */
-async function probePairedControl(origin: string, signal?: AbortSignal): Promise<boolean> {
+async function probeControl(
+  origin: string | null,
+  signal?: AbortSignal,
+): Promise<{ paired: boolean; edgeTerminated: boolean }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LATENCY_TIMEOUT_MS);
   const abort = (): void => controller.abort();
   signal?.addEventListener('abort', abort);
   try {
-    const response = await fetch(`${origin}/api/ping?probe=pairing`, {
+    const response = await fetch(`${origin ?? ''}/api/health?probe=control`, {
       cache: 'no-store',
       signal: controller.signal,
     });
-    return response.ok;
+    if (!response.ok) return { paired: origin === null, edgeTerminated: false };
+    const body = (await response.json()) as { edgeTerminated?: unknown };
+    return { paired: true, edgeTerminated: body.edgeTerminated === true };
   } catch {
-    // A CORS rejection, a 404, or an unreachable host all land here, and all
-    // three mean the same thing: not a paired instance.
-    return false;
+    // Same-origin is still an instance even if this one call failed; anything
+    // else is not, and gets the opaque measurement instead.
+    return { paired: origin === null, edgeTerminated: false };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', abort);

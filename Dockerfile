@@ -31,7 +31,9 @@ COPY packages/ui/package.json ./packages/ui/
 RUN pnpm install --frozen-lockfile
 
 COPY . .
-RUN pnpm run build
+# NODE_ENV=production drops the 850 KB sourcemap, which would otherwise be copied
+# into the runtime image and served publicly on metered bandwidth.
+RUN NODE_ENV=production pnpm run build
 
 # Drop dev dependencies from the tree we are about to copy forward.
 #

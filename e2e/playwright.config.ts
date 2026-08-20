@@ -19,6 +19,18 @@ const PORT = 8799;
 const baseURL = `http://127.0.0.1:${String(PORT)}`;
 
 /**
+ * A second instance, password protected.
+ *
+ * `AUTH_MODE=password` cannot be tested against the main harness, which runs
+ * open — as every local install does, and which must never see a login screen.
+ * Its own database too, so signing in cannot disturb the history specs.
+ */
+export const AUTH_PORT = 8795;
+export const AUTH_PASSWORD = 'e2e-secret';
+export const authBaseURL = `http://127.0.0.1:${String(AUTH_PORT)}`;
+const authDatabasePath = join(mkdtempSync(join(tmpdir(), 'dwc-e2e-auth-')), 'auth.db');
+
+/**
  * Visual snapshots are Linux-only, on purpose.
  *
  * Font rasterisation differs between Windows, macOS and Linux, so baselines taken
@@ -78,26 +90,45 @@ export default defineConfig({
    * whole diagnosis rests on — so testing against `vite dev` would measure
    * something the product never does.
    */
-  webServer: {
-    command: 'node apps/api/src/index.ts',
-    cwd: repoRoot,
-    url: `${baseURL}/api/health`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: {
-      PORT: String(PORT),
-      HOST: '127.0.0.1',
-      DATABASE_PATH: databasePath,
-      AUTH_MODE: 'none',
-      LOG_LEVEL: 'warn',
-      // Below 5 samples the engine treats variance as noise, so keep the real
-      // default rather than speeding tests up into a different code path.
-      STABILITY_SAMPLES: '5',
-      RATE_LIMIT_PER_MINUTE: '200',
+  webServer: [
+    {
+      command: 'node apps/api/src/index.ts',
+      cwd: repoRoot,
+      url: `${authBaseURL}/api/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        PORT: String(AUTH_PORT),
+        HOST: '127.0.0.1',
+        DATABASE_PATH: authDatabasePath,
+        AUTH_MODE: 'password',
+        AUTH_PASSWORD,
+        LOG_LEVEL: 'warn',
+      },
     },
-  },
+    {
+      command: 'node apps/api/src/index.ts',
+      cwd: repoRoot,
+      url: `${baseURL}/api/health`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+      env: {
+        PORT: String(PORT),
+        HOST: '127.0.0.1',
+        DATABASE_PATH: databasePath,
+        AUTH_MODE: 'none',
+        LOG_LEVEL: 'warn',
+        // Below 5 samples the engine treats variance as noise, so keep the real
+        // default rather than speeding tests up into a different code path.
+        STABILITY_SAMPLES: '5',
+        RATE_LIMIT_PER_MINUTE: '200',
+      },
+    },
+  ],
 });
 
 /**

@@ -92,3 +92,18 @@ there; take a timestamp as an argument instead.
 ## Reporting a security issue
 
 See [SECURITY.md](SECURITY.md). Please do not open a public issue for anything touching SSRF.
+
+## Visual baselines
+
+Three snapshots, and only three: the empty state and the full report in both themes. They exist to catch
+the catastrophe nothing else looks for — a stylesheet that failed to load, a theme that stopped applying,
+a page that renders blank. Everything else about layout is asserted by measurement, which fails with the
+offending element named rather than with a diff to squint at.
+
+Baselines are **Linux-only**, because font rasterisation differs by platform and a baseline taken on a
+developer machine can never match CI. They skip everywhere else.
+
+To regenerate after an intentional design change: run the **CI** workflow manually with
+`update_snapshots` set to true, download the `visual-baselines` artifact, and commit the PNGs it
+contains. That job runs in the same Playwright container CI compares against, which is the only
+environment that produces matching images.

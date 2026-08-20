@@ -44,18 +44,6 @@ export class DwcReportView extends LitElement {
         gap: var(--dwc-space-6);
       }
 
-      .headline-row {
-        display: grid;
-        gap: var(--dwc-space-4);
-        align-items: start;
-      }
-
-      @container (min-width: 48rem) {
-        .headline-row {
-          grid-template-columns: 1fr auto;
-        }
-      }
-
       .tiles {
         display: grid;
         gap: var(--dwc-space-3);

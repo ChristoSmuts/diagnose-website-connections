@@ -40,6 +40,16 @@ services:
       # between" correctly report as not measured. Point this at another instance
       # reachable across the internet to measure them for real. See the README.
       CONTROL_URL: ${CONTROL_URL:-}
+      # Set when a reverse proxy you control is in front. Without it every
+      # visitor shares one rate-limit bucket. See DEPLOYMENT.md.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      # Override only if you are behind a CDN we do not recognise.
+      EDGE_TERMINATED: ${EDGE_TERMINATED:-}
+      # Public endpoints for the browser to time alongside the target. Empty
+      # unless you opt in; these are third parties.
+      REFERENCE_URLS: ${REFERENCE_URLS:-}
+      # Only needed when the app and API are served from different origins.
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_PATH: /app/data/dwc.db
 

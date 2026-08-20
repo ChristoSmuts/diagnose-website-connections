@@ -391,6 +391,66 @@ export class DwcApp extends LitElement {
           var(--dwc-shadow-sm);
       }
 
+      /*
+       * The password gate. Deliberately the whole viewport: with no session
+       * there is no sidebar, no history and nothing to run, so framing it as a
+       * dialog over the app would imply there is something behind it.
+       */
+      .gate {
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: var(--dwc-space-4);
+      }
+
+      .gate-card {
+        width: min(24rem, 100%);
+        display: grid;
+        gap: var(--dwc-space-3);
+        padding: var(--dwc-space-6);
+        border: 1px solid var(--dwc-border);
+        border-radius: var(--dwc-radius-lg);
+        background: var(--dwc-surface-raised);
+      }
+
+      .gate-card h1 {
+        margin: 0;
+        font-size: var(--dwc-text-xl);
+        font-weight: var(--dwc-weight-semibold);
+      }
+
+      .gate-lede {
+        margin: 0;
+        color: var(--dwc-text-muted);
+        font-size: var(--dwc-text-sm);
+      }
+
+      .gate-label {
+        font-size: var(--dwc-text-sm);
+        font-weight: var(--dwc-weight-medium);
+      }
+
+      .gate-card input {
+        min-height: var(--dwc-tap-target);
+        padding: 0 var(--dwc-space-3);
+        border: 1px solid var(--dwc-border-strong);
+        border-radius: var(--dwc-radius);
+        background: var(--dwc-surface);
+        color: var(--dwc-text);
+        font: inherit;
+      }
+
+      .gate-card input:focus-visible {
+        outline: 2px solid var(--dwc-brand);
+        outline-offset: 2px;
+      }
+
+      .gate-error {
+        margin: 0;
+        color: var(--dwc-danger-text, var(--dwc-text));
+        font-size: var(--dwc-text-sm);
+      }
+
       .error {
         display: flex;
         align-items: center;
@@ -483,6 +543,10 @@ export class DwcApp extends LitElement {
     sidebarCollapsed: { state: true },
     isDesktop: { state: true },
     controlUrl: { state: true },
+    needsPassword: { state: true },
+    password: { state: true },
+    signingIn: { state: true },
+    signInError: { state: true },
   };
 
   private theme: ThemeChoice = 'system';
@@ -508,6 +572,27 @@ export class DwcApp extends LitElement {
   private isDesktop = false;
   /** Where the browser measures its baseline. Null means same-origin. */
   private controlUrl: string | null = null;
+
+  /** Public endpoints to time alongside the target. Empty unless configured. */
+  private referenceUrls: readonly string[] = [];
+
+  /**
+   * Whether the rail is actually collapsed, as opposed to remembered as such.
+   *
+   * `sidebarCollapsed` is persisted and survives a resize; the control that
+   * unsets it only exists above 60rem. Reading the two together in one place is
+   * what stops the drawer and the nav tree disagreeing — they did, and the drawer
+   * opened as a rail of unlabelled icons with no way back.
+   */
+  private get railCollapsed(): boolean {
+    return this.isDesktop && this.sidebarCollapsed;
+  }
+
+  /** True once the server has refused for want of a session. */
+  private needsPassword = false;
+  private password = '';
+  private signingIn = false;
+  private signInError: string | null = null;
 
   /**
    * Drives which side of the 60rem breakpoint we are on.
@@ -572,9 +657,13 @@ export class DwcApp extends LitElement {
       .health()
       .then((health) => {
         this.controlUrl = health.controlUrl;
+        this.referenceUrls = health.referenceUrls;
       })
       .catch(() => {
+        // Health is unauthenticated, so a failure here is a real outage rather
+        // than a missing session. Same-origin is the honest fallback.
         this.controlUrl = null;
+        this.referenceUrls = [];
       });
 
     await this.refreshSites();
@@ -624,6 +713,15 @@ export class DwcApp extends LitElement {
        */
       this.sites = await api.listSites(this.showArchived ? 'all' : 'active');
     } catch (error) {
+      /*
+       * A 401 here is not an error to show in a banner — it is the instance
+       * asking who you are. This is the first authenticated call the app makes,
+       * so it is where the gate goes up.
+       */
+      if (error instanceof ApiError && error.needsPassword) {
+        this.needsPassword = true;
+        return;
+      }
       this.error = error instanceof ApiError ? error.message : 'Could not load your saved sites.';
     }
   }
@@ -720,6 +818,7 @@ export class DwcApp extends LitElement {
       const client = await runClientProbe({
         targetUrl: target,
         controlUrl: this.controlUrl,
+        referenceUrls: this.referenceUrls,
         throughputConsent: this.throughputConsent,
         onProgress: (message) => this.setStep('client', 'started', message),
       });
@@ -798,6 +897,8 @@ export class DwcApp extends LitElement {
   // --- render --------------------------------------------------------------
 
   override render(): TemplateResult {
+    if (this.needsPassword) return this.renderLogin();
+
     return html`
       <div class="shell">
         <button
@@ -875,6 +976,77 @@ export class DwcApp extends LitElement {
    * whenever a report is on screen — so a failed re-run, a rate limit or a lost
    * connection produced nothing at all for the reader to see.
    */
+  /**
+   * The password gate for a shared instance.
+   *
+   * Rendered instead of the whole shell rather than over it: with no session
+   * there is no site list, no history and nothing to run, so a dialog floating
+   * above an empty app would only imply otherwise. `AUTH_MODE=none` — the
+   * default, and every local install — never reaches this.
+   */
+  private renderLogin(): TemplateResult {
+    return html`
+      <div class="gate">
+        <form
+          class="gate-card"
+          @submit=${(event: Event) => {
+            event.preventDefault();
+            void this.signIn();
+          }}
+        >
+          <h1>Connection Diagnostics</h1>
+          <p class="gate-lede">This instance is password protected.</p>
+
+          <label class="gate-label" for="password">Password</label>
+          <input
+            id="password"
+            type="password"
+            name="password"
+            autocomplete="current-password"
+            .value=${this.password}
+            ?disabled=${this.signingIn}
+            @input=${(event: Event) => {
+              this.password = (event.target as HTMLInputElement).value;
+              this.signInError = null;
+            }}
+          />
+
+          ${
+            this.signInError === null
+              ? nothing
+              : html`<p class="gate-error" role="alert">${this.signInError}</p>`
+          }
+
+          <dwc-button type="submit" ?loading=${this.signingIn} ?disabled=${this.password === ''}>
+            Sign in
+          </dwc-button>
+        </form>
+      </div>
+    `;
+  }
+
+  private async signIn(): Promise<void> {
+    if (this.password === '') return;
+    this.signingIn = true;
+    this.signInError = null;
+    try {
+      await api.signIn(this.password);
+      this.needsPassword = false;
+      this.password = '';
+      // The session cookie now exists, so the load that failed can be retried.
+      await this.start();
+    } catch (error) {
+      this.signInError =
+        error instanceof ApiError && error.needsPassword
+          ? 'That password is not correct.'
+          : error instanceof Error
+            ? error.message
+            : 'Could not sign in.';
+    } finally {
+      this.signingIn = false;
+    }
+  }
+
   private renderError(): TemplateResult | typeof nothing {
     if (this.error === null) return nothing;
 
@@ -920,7 +1092,18 @@ export class DwcApp extends LitElement {
       -->
       <aside
         data-open=${this.sidebarOpen ? 'true' : 'false'}
-        data-collapsed=${this.sidebarCollapsed ? 'true' : 'false'}
+        ${
+          /*
+           * The rail is a desktop idea, and the flag outlives the viewport.
+           *
+           * `sidebarCollapsed` is remembered in localStorage and the control that
+           * unsets it is display:none below 60rem — so collapsing on a desktop and
+           * then loading on a phone opened the drawer as a label-less rail with no
+           * way back out of it. The state is kept, because widening the window
+           * should restore what you chose; it is simply not applied down here.
+           */ ''
+        }
+        data-collapsed=${this.railCollapsed ? 'true' : 'false'}
         ?inert=${!this.isDesktop && !this.sidebarOpen}
         aria-label="Saved sites"
       >
@@ -962,7 +1145,7 @@ export class DwcApp extends LitElement {
         <dwc-nav-tree
           .sites=${this.sites}
           .reportsBySite=${this.reportsBySite}
-          ?collapsed=${this.sidebarCollapsed}
+          ?collapsed=${this.railCollapsed}
           view=${this.showArchived ? 'archived' : 'active'}
           selected-site=${this.selectedSiteId ?? ''}
           selected-report=${this.report?.id ?? ''}

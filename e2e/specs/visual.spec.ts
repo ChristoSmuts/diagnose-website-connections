@@ -1,49 +1,59 @@
 import { expect, test } from '@playwright/test';
-import { checkRows, openApp, runDiagnostic, setTheme, volatileRegions } from '../support/app.js';
+import { openApp, runDiagnostic, setTheme, volatileRegions } from '../support/app.js';
 
 /**
- * Visual regression across light/dark × mobile/desktop.
+ * Three snapshots, and deliberately only three.
  *
- * Two decisions make the difference between a suite that protects the design and
- * one that gets disabled after a week of false failures:
+ * This suite used to take nine per browser project — the empty state, the verdict
+ * banner, the whole report and an expanded check, in both themes, plus the mobile
+ * drawer. It had no committed baselines at all, so it skipped on Windows and would
+ * have created-and-failed on Linux: a gate that read as coverage and provided
+ * none.
+ *
+ * The reason for cutting rather than generating all of them is what the rest of
+ * this suite has proved. Every real layout bug here was caught by *measuring* —
+ * the status dot that was an oval, the report that scrolled sideways at 320px,
+ * the print stylesheet that could never open a collapsed check. None of those
+ * needed a reference image, and all of them produce a failure that names the
+ * offending element instead of showing a diff to squint at.
+ *
+ * What pixels are uniquely good at is catching the catastrophe no assertion
+ * thinks to look for: a stylesheet that failed to load, a theme that stopped
+ * applying, a page that renders blank. Three images cover that. The other six
+ * mostly generated churn, because they changed every time the design did.
+ *
+ * Two constraints remain:
  *
  *  1. **Linux-only baselines.** Font rasterisation differs by platform, so
- *     baselines taken on Windows or macOS can never match CI. Only Linux baselines
- *     are committed — produced in CI or locally through the official Playwright
- *     container. Everywhere else these specs skip.
- *
+ *     baselines taken on Windows or macOS can never match CI. See
+ *     `.github/workflows/ci.yml` for the job that regenerates them.
  *  2. **Volatile regions are masked.** Latency figures, timestamps and the health
- *     score all change every run against the live internet. Comparing them would
- *     fail for reasons unrelated to the design, so they are masked out and asserted
- *     in the functional specs instead.
+ *     score change every run against the live internet, and comparing them would
+ *     fail for reasons that have nothing to do with the design.
  */
 test.describe('visual regression', () => {
   test.skip(
     process.platform !== 'linux',
-    'Snapshot baselines are Linux-only — run in the Playwright container (via WSL) or in CI.',
+    'Snapshot baselines are Linux-only — regenerate them with the update-snapshots CI job.',
   );
 
+  test.skip(
+    ({ viewport }) => (viewport?.width ?? 0) < 960,
+    'One viewport is enough to catch a page that failed to render; layout has its own specs.',
+  );
+
+  test('the empty state looks right', async ({ page }) => {
+    await openApp(page);
+    await setTheme(page, 'light');
+    await expect(page).toHaveScreenshot('empty-light.png', { fullPage: true });
+  });
+
+  /**
+   * Both themes for the report, because a theme that stops applying is exactly
+   * the failure this is here for and it shows up in the palette rather than the
+   * structure.
+   */
   for (const theme of ['light', 'dark'] as const) {
-    test(`the empty state looks right (${theme})`, async ({ page }) => {
-      await openApp(page);
-      await setTheme(page, theme);
-
-      // The empty state has no measured values, so nothing needs masking.
-      await expect(page).toHaveScreenshot(`empty-${theme}.png`, { fullPage: true });
-    });
-
-    test(`the verdict hero looks right (${theme})`, async ({ page }) => {
-      await openApp(page);
-      await setTheme(page, theme);
-      await runDiagnostic(page);
-
-      // Only the banner: the ambient wash, display type and the dial's relationship
-      // to the headline are what this guards.
-      await expect(page.locator('dwc-verdict-banner')).toHaveScreenshot(`hero-${theme}.png`, {
-        mask: [page.locator('dwc-score-dial')],
-      });
-    });
-
     test(`the full report looks right (${theme})`, async ({ page }) => {
       await openApp(page);
       await setTheme(page, theme);
@@ -54,32 +64,7 @@ test.describe('visual regression', () => {
         mask: volatileRegions(page),
       });
     });
-
-    test(`an expanded check looks right (${theme})`, async ({ page }) => {
-      await openApp(page);
-      await setTheme(page, theme);
-      await runDiagnostic(page);
-
-      const first = checkRows(page).first();
-      await first.locator('button.summary').click();
-
-      await expect(first).toHaveScreenshot(`check-expanded-${theme}.png`, {
-        mask: [first.locator('.headline'), first.locator('td.value')],
-      });
-    });
   }
-
-  test('the mobile drawer looks right when open', async ({ page }, testInfo) => {
-    test.skip(
-      testInfo.project.name !== 'chromium-mobile',
-      'The drawer only exists below the desktop breakpoint.',
-    );
-
-    await openApp(page);
-    await page.locator('.menu-button, button[aria-label*="menu" i]').first().click();
-
-    await expect(page).toHaveScreenshot('drawer-open.png');
-  });
 });
 
 test.describe('reduced motion', () => {

@@ -16,13 +16,14 @@
     "@dwc/contracts": "workspace:*",
     "@dwc/diagnostics": "workspace:*",
     "@dwc/persistence": "workspace:*",
+    "@fastify/compress": "^9.2.0",
     "@fastify/cors": "catalog:",
     "@fastify/helmet": "catalog:",
     "@fastify/rate-limit": "catalog:",
+    "@fastify/static": "catalog:",
     "fastify": "catalog:",
     "pino": "catalog:",
-    "zod": "catalog:",
-    "@fastify/static": "catalog:"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",

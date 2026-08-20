@@ -33,6 +33,12 @@ export interface ScenarioOptions {
   controlIsLocal?: boolean;
   /** False when CONTROL_URL points at something that is not another instance. */
   controlIsPaired?: boolean;
+  /** True when the control endpoint answered from a CDN edge rather than itself. */
+  controlIsEdgeTerminated?: boolean;
+  /** Medians for timed reference endpoints, keyed by origin. */
+  referenceSamples?: Record<string, number[]>;
+  /** Whether the page itself is served from loopback — the throughput case. */
+  appIsLocal?: boolean;
   clientFailed?: number;
   downloadBps?: number | null;
   compression?: string | null;
@@ -247,6 +253,9 @@ export function makeClientEvidence(opts: ScenarioOptions = {}): ClientEvidence |
     controlOrigin = null,
     controlIsLocal = false,
     controlIsPaired = true,
+    controlIsEdgeTerminated = false,
+    referenceSamples = {},
+    appIsLocal = opts.controlIsLocal ?? false,
   } = opts;
 
   if (clientRttSamples === null) return null;
@@ -262,6 +271,12 @@ export function makeClientEvidence(opts: ScenarioOptions = {}): ClientEvidence |
     controlOrigin,
     controlIsLocal,
     controlIsPaired,
+    controlIsEdgeTerminated,
+    appIsLocal,
+    references: Object.entries(referenceSamples).map(([origin, samples]) => ({
+      origin,
+      stats: computeStats(samples, 0, 'ms'),
+    })),
     target: computeStats(target, 0, 'ms'),
     throughput:
       downloadBps === null
@@ -366,6 +381,54 @@ export const scenarios = {
     makeEvidence({
       clientRttSamples: [38, 41, 36, 40, 39],
       controlOrigin: 'https://control.example.net',
+    }),
+
+  /**
+   * A laptop install with reference endpoints configured.
+   *
+   * The control is loopback and useless, but the references still establish the
+   * reader's floor — so the route becomes answerable on a machine that has no
+   * second instance anywhere.
+   */
+  localWithReferences: (): Evidence =>
+    makeEvidence({
+      controlIsLocal: true,
+      clientRttSamples: [3, 3, 4, 3, 3],
+      clientTargetSamples: [140, 145, 138, 142, 141],
+      referenceSamples: { 'https://reference.example.net': [35, 37, 34, 36, 35] },
+    }),
+
+  /**
+   * The same, but the reader pays far more for this site than for a reference.
+   *
+   * The server reaches it quickly, so the extra is on the reader's side of the
+   * target rather than the site being slow or far.
+   */
+  localReferencesShowRoute: (): Evidence =>
+    makeEvidence({
+      ttfbMs: 60,
+      tcpMs: 20,
+      tlsMs: 30,
+      controlIsLocal: true,
+      clientRttSamples: [3, 3, 4, 3, 3],
+      clientTargetSamples: [820, 840, 810, 835, 825],
+      referenceSamples: { 'https://reference.example.net': [40, 42, 39, 41, 40] },
+    }),
+
+  /**
+   * A paired instance, but fronted by a CDN or a tunnel.
+   *
+   * The nastiest of the three, because everything looks right: the control is a
+   * real instance of this app, the hostname is public, and the round trip is a
+   * genuine internet measurement. It just ended at an edge near the reader rather
+   * than at the machine, so it is too short to subtract.
+   */
+  edgeTerminatedControl: (): Evidence =>
+    makeEvidence({
+      clientRttSamples: [11, 12, 10, 12, 11],
+      clientTargetSamples: [480, 495, 470, 488, 484],
+      controlOrigin: 'https://diagnostics.example.com',
+      controlIsEdgeTerminated: true,
     }),
 
   /**

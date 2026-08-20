@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Regenerating visual baselines is a manual act. They must be produced in the
+  # same container CI compares against — font rasterisation differs by platform,
+  # so a baseline taken on a developer machine can never match.
+  workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: 'Regenerate visual baselines and upload them as an artifact'
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -95,9 +104,28 @@ jobs:
         run: pnpm run build
 
       - name: End-to-end, accessibility and visual regression
+        if: ${{ inputs.update_snapshots != true }}
         run: pnpm --filter @dwc/e2e run e2e
         env:
           CI: 'true'
+
+      # Writes the baselines rather than comparing against them, then hands them
+      # back to be committed. Playwright exits non-zero when it creates a
+      # snapshot, which is correct for a normal run and not what we want here.
+      - name: Regenerate visual baselines
+        if: ${{ inputs.update_snapshots == true }}
+        run: pnpm --filter @dwc/e2e exec playwright test specs/visual.spec.ts --update-snapshots || true
+        env:
+          CI: 'true'
+
+      - name: Upload the regenerated baselines
+        if: ${{ inputs.update_snapshots == true }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: visual-baselines
+          path: e2e/specs/**/*.png
+          retention-days: 7
+          if-no-files-found: error
 
       - name: Upload traces, screenshots and visual diffs
         if: ${{ !cancelled() }}

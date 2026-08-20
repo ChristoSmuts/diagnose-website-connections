@@ -161,6 +161,24 @@ export class DwcCheckRow extends LitElement {
         padding-top: var(--dwc-space-4);
       }
 
+      /*
+       * Collapsed by CSS rather than by the 'hidden' attribute, and that is not a
+       * stylistic preference.
+       *
+       * The HTML rendering spec gives '[hidden]' a UA rule of
+       * 'display: none !important', and a UA !important beats an author
+       * !important — so the print stylesheet below could never force a collapsed
+       * check open. Printing a report produced headings with nothing under them,
+       * which is the exact thing those print rules exist to prevent.
+       *
+       * 'display: none' removes it from the accessibility tree just as the
+       * attribute did, and the button still carries aria-expanded and
+       * aria-controls, so nothing is lost.
+       */
+      .row[data-open='false'] .detail {
+        display: none;
+      }
+
       .technical {
         margin: 0;
         font-size: var(--dwc-text-sm);
@@ -194,10 +212,19 @@ export class DwcCheckRow extends LitElement {
       tbody tr:nth-child(even) {
         background: var(--dwc-surface-sunken);
       }
+      /*
+       * Labels wrap. They used to be 'white-space: nowrap', which was fine while
+       * every label was two words — and then the hosting checks arrived with
+       * "Country claimed by routing registry, for the announced prefix". A table
+       * cell that cannot wrap sets a min-content floor under the whole table, and
+       * the table has no scroll container, so one long label pushed a 320px page
+       * out to 446px. The labels were shortened too, but this is the rule that
+       * stops the next one doing it again.
+       */
       th {
         font-weight: var(--dwc-weight-medium);
         color: var(--dwc-text-muted);
-        white-space: nowrap;
+        overflow-wrap: anywhere;
       }
       td {
         color: var(--dwc-text);
@@ -333,7 +360,7 @@ export class DwcCheckRow extends LitElement {
           <dwc-icon class="chevron" name="chevron"></dwc-icon>
         </button>
 
-        <div class="detail" id=${detailId} ?hidden=${!this.open}>
+        <div class="detail" id=${detailId}>
           <p class="technical">${check.technical}</p>
           ${this.renderEvidence(check)}
           ${

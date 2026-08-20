@@ -1,8 +1,10 @@
 import type { ClientEvidence, Evidence, Finding } from '@dwc/contracts';
 import { distanceCeilingKm } from '../location.js';
+import { compareRoute } from '../route.js';
 import { lossRatio } from '../stats.js';
 import {
   DISTANT_ORIGIN_RTT_MS,
+  PATH_DEGRADATION,
   THRESHOLDS,
   classify,
   classifyInverted,
@@ -164,23 +166,31 @@ export function detectClientFindings(client: ClientEvidence | null): Finding[] {
 export function detectPathFindings(evidence: Evidence, excessMs: number | null): Finding[] {
   const out: Finding[] = [];
   const { server, client } = evidence;
-  if (client === null || excessMs === null) return out;
 
-  // Loopback control means no usable baseline; assessNetworkPath already
-  // returned unknown, so excessMs will be null and we never reach here.
-  if (controlIsLoopback(client)) return out;
-
-  const userLatency = client.control.median ?? 0;
+  const userLatency = client?.control.median ?? 0;
   const serverTime = server.http?.ttfbMs.value ?? 0;
-  const actual = client.target.median ?? 0;
+  const actual = client?.target.median ?? 0;
   // Same expectation the vantage assessment used, including connection setup —
   // recomputing it differently here is how the two would silently disagree.
-  const expected = actual - excessMs;
+  const expected = actual - (excessMs ?? 0);
+
+  /*
+   * Only `path-degraded` needs the subtraction; the two findings below do not.
+   *
+   * This whole function used to return early when `excessMs` was null, which is
+   * the case on every local install and behind every unpaired or edge-terminated
+   * control. That silently suppressed `no-cdn` — which reads no browser evidence
+   * at all — and `origin-geographically-distant`, which needs the browser's time
+   * to the target but nothing about the control. The effect was a local report
+   * that scored the same site 100 where a hosted one scored 96, purely because
+   * findings it was entitled to make never fired.
+   */
+  const canSubtract = client !== null && excessMs !== null && !controlIsLoopback(client);
 
   let pathDegraded = false;
-  if (excessMs > 0 && actual > expected) {
+  if (canSubtract && excessMs !== null && excessMs > 0 && actual > expected) {
     const ratio = expected > 0 ? actual / expected : 1;
-    if (ratio >= 2 && excessMs >= 250) {
+    if (ratio >= PATH_DEGRADATION.ratio && excessMs >= PATH_DEGRADATION.absoluteFloorMs) {
       pathDegraded = true;
       out.push(
         finding({
@@ -212,6 +222,52 @@ export function detectPathFindings(evidence: Evidence, excessMs: number | null):
   }
 
   /*
+   * The same conclusion, reached the other way.
+   *
+   * When the control could not anchor the subtraction, `assessNetworkPath` falls
+   * back to comparing destinations — the target against the quickest reference
+   * endpoint. If that produced a verdict, this has to produce the matching
+   * finding, or the tile says "degraded" beside a list that mentions nothing.
+   */
+  if (!canSubtract && client !== null) {
+    const route = compareRoute(client, server);
+    if (route !== null && route.readerPaysMore) {
+      pathDegraded = true;
+      out.push(
+        finding({
+          code: 'path-degraded',
+          severity: route.gapMs > 800 ? 'major' : 'minor',
+          owner: 'your-isp',
+          confidence: 'medium',
+          title: 'Traffic between you and this site takes a slow route',
+          plain: `Reaching this site from your device costs about ${ms(route.gapMs)} more than reaching a well-connected reference endpoint, and the site itself answers us quickly.`,
+          impact:
+            'This site feels slower to you than it does to other people, even though nothing is wrong with either your connection or the site itself.',
+          technical: `Your browser reached ${route.floorOrigin} in ${ms(route.floorMs)} and this site in ${ms(route.targetMs)}, a gap of ${ms(route.gapMs)} — against ${route.serverCostMs === null ? 'an unknown' : ms(route.serverCostMs)} for the same connection and first byte from our own server. Both browser figures were measured over your link within seconds of each other, so the difference is what reaching this particular site costs you beyond your own best case. Inferred by comparing destinations rather than vantages, which is what makes it available without a paired control endpoint.`,
+          evidence: [
+            { label: 'This site, from your browser', value: ms(route.targetMs) },
+            { label: `Reference (${route.floorOrigin})`, value: ms(route.floorMs) },
+            { label: 'Gap', value: ms(route.gapMs), provenance: 'inferred' },
+            {
+              label: 'The same journey from our server',
+              value: route.serverCostMs === null ? 'not measured' : ms(route.serverCostMs),
+              provenance: route.serverCostMs === null ? 'unavailable' : 'measured',
+            },
+          ],
+          remediation: {
+            summary: 'Little you can do directly, but worth confirming and reporting.',
+            steps: [
+              'Try the site over a different network — mobile data is an easy comparison. If it is fast there, the route your provider uses is the problem.',
+              'A VPN sometimes bypasses a poor route, which also confirms the diagnosis.',
+              'Report it to your provider with these figures; routing problems are theirs to fix.',
+            ],
+          },
+        }),
+      );
+    }
+  }
+
+  /*
    * Distance as the explanation of last resort.
    *
    * Only reached once the two competing explanations are ruled out: a CDN would
@@ -226,6 +282,7 @@ export function detectPathFindings(evidence: Evidence, excessMs: number | null):
    */
   const ceilingKm = distanceCeilingKm(actual);
   if (
+    client !== null &&
     server.network.cdnDetected === null &&
     actual >= DISTANT_ORIGIN_RTT_MS &&
     !pathDegraded &&

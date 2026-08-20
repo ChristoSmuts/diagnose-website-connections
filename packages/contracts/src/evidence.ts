@@ -312,6 +312,54 @@ export const ClientEvidenceSchema = z.object({
    * come from a paired endpoint, still means what it meant.
    */
   controlIsPaired: z.boolean().default(true),
+  /**
+   * Whether the connection to the control endpoint ended at a CDN edge.
+   *
+   * A paired instance behind Cloudflare, a tunnel, or any distributed frontend
+   * answers the browser from a point of presence near the reader rather than from
+   * the machine itself. The round trip is real and still describes the reader's
+   * own link — it is arguably a better measure of it than a distant origin would
+   * be — but it cannot be subtracted from their time to the target, because the
+   * baseline is then short by however far the target actually is.
+   *
+   * This is the same fault as loopback and as an unpaired anycast control, which
+   * is why all three now share one predicate. Reported by the endpoint that
+   * answered, from the request headers it received, rather than guessed from the
+   * timing.
+   *
+   * Defaulted false so evidence recorded before this field still means what it
+   * meant: at the time, nothing could have been edge-terminated and undetected.
+   */
+  controlIsEdgeTerminated: z.boolean().default(false),
+  /**
+   * Whether the page itself is served from this machine or this LAN.
+   *
+   * Distinct from `controlIsLocal`, which describes the control endpoint. The
+   * throughput test always fetches from the page's own origin, so on a local
+   * install it measures loopback however remote `CONTROL_URL` points — and a
+   * loopback transfer is not a statement about anyone's bandwidth any more than a
+   * loopback round trip is about their latency.
+   *
+   * Defaulted false so evidence recorded before this field still parses; the
+   * throughput check treats false as "not known to be local" rather than as a
+   * guarantee.
+   */
+  appIsLocal: z.boolean().default(false),
+  /**
+   * Round trips from the browser to well-known public endpoints.
+   *
+   * A second way to reason about the route, and the only one that needs nothing
+   * of our own deployment. The control measurement compares vantages — the
+   * reader against our server — and breaks whenever our end sits closer to the
+   * reader than the target does. These compare *destinations* instead: the
+   * quickest reference is roughly the reader's floor, so whatever the target
+   * costs above that is what reaching this particular site costs them.
+   *
+   * That works on a laptop and behind a CDN, where the control cannot anchor
+   * anything. It is opt-in because it means contacting third parties, which this
+   * project otherwise refuses — empty unless an operator sets REFERENCE_URLS.
+   */
+  references: z.array(z.object({ origin: z.string(), stats: SampleStatsSchema })).default([]),
   /** Vantage T: browser → the target. Coarse; CORS hides the detail. */
   target: SampleStatsSchema,
   throughput: ThroughputEvidenceSchema.nullable(),

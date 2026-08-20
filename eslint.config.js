@@ -239,7 +239,9 @@ export default tseslint.config(
       // The a11y specs assert inside a shared `audit()` helper so a failure can
       // print the offending rule and element; without this the rule reads them as
       // assertion-free.
-      'playwright/expect-expect': ['warn', { assertFunctionNames: ['audit'] }],
+      // Helpers that assert on the caller's behalf. Without these the rule
+      // flags a test whose assertions live one function call away.
+      'playwright/expect-expect': ['warn', { assertFunctionNames: ['audit', 'noOverflow'] }],
     },
   },
 

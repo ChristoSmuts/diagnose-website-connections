@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { LOCAL_PRINCIPAL, type Principal } from '@dwc/contracts';
 import type { FastifyRequest } from 'fastify';
 import type { Config } from './config.ts';
@@ -19,7 +20,7 @@ export function resolvePrincipal(config: Config, request: FastifyRequest): Princ
     case 'password': {
       // One shared secret, for an instance exposed to the internet.
       const cookie = parseCookies(request.headers.cookie)['dwc_session'];
-      return cookie !== undefined && cookie === expectedToken(config)
+      return cookie !== undefined && matchesToken(cookie, expectedToken(config))
         ? { id: 'local', name: 'Local', mode: 'password' }
         : null;
     }
@@ -36,9 +37,31 @@ export function resolvePrincipal(config: Config, request: FastifyRequest): Princ
   }
 }
 
-/** Deterministic token derived from the configured password. */
+/**
+ * Deterministic token derived from the configured password.
+ *
+ * Deliberately not a hash: the server has to recognise the cookie without
+ * storing sessions, and the password is a single shared secret either way, so
+ * hashing would protect nothing that is not already shared. It does mean anyone
+ * holding the cookie can recover the password, which is why SECURITY.md records
+ * it as a limitation and why the cookie is Secure and HttpOnly.
+ */
 export function expectedToken(config: Config): string {
   return Buffer.from(`dwc:${config.password ?? ''}`).toString('base64url');
+}
+
+/**
+ * Compare in constant time.
+ *
+ * `timingSafeEqual` throws on a length mismatch, and the length itself leaks a
+ * little, so unequal lengths are rejected up front — a wrong-length guess is not
+ * a near miss worth hiding. The point is that a right-length guess reveals
+ * nothing about how many leading bytes were correct.
+ */
+export function matchesToken(candidate: string, expected: string): boolean {
+  const a = Buffer.from(candidate);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 function parseCookies(header: string | undefined): Record<string, string> {

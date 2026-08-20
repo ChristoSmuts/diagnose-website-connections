@@ -1,0 +1,124 @@
+name: Publish container image
+
+# A tag is the trigger, so publishing is a deliberate act rather than something
+# every push does. `workflow_dispatch` is there for the first run and for
+# re-publishing a tag whose build failed for an unrelated reason.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ${{ github.repository }}
+
+jobs:
+  # Each architecture builds on its own hardware.
+  #
+  # better-sqlite3 has no musl prebuilds, so it compiles sqlite3.c from source on
+  # every uncached install — which under QEMU emulation takes long enough to be a
+  # real problem. GitHub's arm64 runners are free for public repositories, so
+  # there is no reason to emulate.
+  build:
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            suffix: amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            suffix: arm64
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          cache-from: type=gha,scope=${{ matrix.suffix }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.suffix }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      # The manifest job needs to know what each build produced, and a matrix
+      # cannot return a value — so each digest is written to a file named after
+      # its own architecture and collected as an artifact.
+      - name: Record the digest
+        run: |
+          mkdir -p /tmp/digests
+          echo "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.suffix }}"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.suffix }}
+          path: /tmp/digests/*
+          retention-days: 1
+
+  # One tag pointing at both architectures, so `docker pull` on an Ampere VM and
+  # on a laptop resolve to the same release without anyone choosing a suffix.
+  manifest:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: /tmp/digests
+          pattern: digest-*
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create and push the manifest
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          # A manual run has no tag to read, so it publishes only :edge.
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tags="-t ${REGISTRY}/${IMAGE}:${version} -t ${REGISTRY}/${IMAGE}:latest"
+          else
+            tags="-t ${REGISTRY}/${IMAGE}:edge"
+          fi
+
+          refs=""
+          for file in /tmp/digests/*; do
+            refs="${refs} ${REGISTRY}/${IMAGE}@$(cat "${file}")"
+          done
+
+          # shellcheck disable=SC2086
+          docker buildx imagetools create ${tags} ${refs}
+
+      - name: Show what was published
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            docker buildx imagetools inspect "${REGISTRY}/${IMAGE}:${GITHUB_REF_NAME#v}"
+          else
+            docker buildx imagetools inspect "${REGISTRY}/${IMAGE}:edge"
+          fi

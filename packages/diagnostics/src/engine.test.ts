@@ -98,6 +98,132 @@ describe('honesty guarantees', () => {
    * real internet round trip to the user's ISP, producing a confident
    * "your provider is routing badly" verdict from evidence that did not exist.
    */
+  describe('no loopback figure is ever presented as the reader’s', () => {
+    /**
+     * The Phase 1 bug has now been fixed in three separate places: the narration,
+     * the client checks, and — found much later — the route check, which printed
+     * "Your round trip: 2 ms" with a measured badge directly beneath a summary
+     * saying nothing could be judged because the tool was running on the reader's
+     * own machine.
+     *
+     * Guarding each site individually is what let the third one hide, so this
+     * sweeps the whole rendered verdict instead. The control median is a value no
+     * other fixture measurement produces, so finding it badged as measured
+     * anywhere means something is passing loopback off as the reader's link.
+     */
+    const LOOPBACK_MS = 3;
+    const local = () =>
+      makeEvidence({
+        clientRttSamples: [LOOPBACK_MS, LOOPBACK_MS, LOOPBACK_MS, LOOPBACK_MS, LOOPBACK_MS],
+        controlIsLocal: true,
+      });
+
+    it('never badges the loopback round trip as measured, in any check', () => {
+      const offenders = analyse(local())
+        .checks.flatMap((check) => check.evidence.map((row) => ({ check: check.id, ...row })))
+        .filter(
+          (row) => row.provenance === 'measured' && row.value === `${String(LOOPBACK_MS)} ms`,
+        );
+
+      expect(offenders, JSON.stringify(offenders, null, 2)).toEqual([]);
+    });
+
+    /**
+     * Broader than matching one value, because matching one value is what let the
+     * 95th percentile slip through beside a guarded median.
+     *
+     * Every duration in the client phase describes the reader's link, and over
+     * loopback there is no such measurement — so none of them may claim to be
+     * one. Counts and ratios are exempt: they describe our probing, not the link.
+     */
+    it('states no duration at all about a connection it did not measure', () => {
+      const offenders = analyse(local())
+        .checks.filter((check) => check.phase === 'client')
+        .flatMap((check) => check.evidence.map((row) => ({ check: check.id, ...row })))
+        .filter((row) => / ms$/.test(row.value) && row.provenance === 'measured');
+
+      expect(offenders, JSON.stringify(offenders, null, 2)).toEqual([]);
+    });
+
+    it('never states it in a finding either', () => {
+      const offenders = analyse(local())
+        .findings.flatMap((finding) =>
+          finding.evidence.map((row) => ({ code: finding.code, ...row })),
+        )
+        .filter(
+          (row) => row.provenance === 'measured' && row.value === `${String(LOOPBACK_MS)} ms`,
+        );
+
+      expect(offenders, JSON.stringify(offenders, null, 2)).toEqual([]);
+    });
+
+    /** The specific row that was wrong, named so the regression is legible. */
+    it('says why the round trip is missing rather than showing loopback', () => {
+      const row = analyse(local())
+        .checks.find((check) => check.id === 'path.excess')
+        ?.evidence.find((entry) => entry.label === 'Your round trip');
+
+      expect(row?.provenance).toBe('unavailable');
+      expect(row?.value).toMatch(/on this machine/i);
+    });
+  });
+
+  describe('a control endpoint behind a CDN edge', () => {
+    /**
+     * The nastiest of the three, because nothing looks wrong: the control is a
+     * genuine instance of this app on a public hostname, and the round trip is a
+     * real internet measurement. It simply ended at an edge near the reader, so
+     * it is short by however far the target actually is — and the leftover, which
+     * the route verdict hands to the reader's provider, is really distance.
+     */
+    it('refuses to judge the route, and blames no provider for distance', () => {
+      const verdict = analyse(scenarios.edgeTerminatedControl());
+      expect(verdict.vantages.networkPath.status).toBe('unknown');
+      expect(verdict.culprit).not.toBe('network-path');
+      expect(verdict.findings.some((f) => f.code === 'path-degraded')).toBe(false);
+    });
+
+    it('still judges the reader’s own connection', () => {
+      // An edge baseline describes the last mile honestly. Only the subtraction
+      // is invalid, so this vantage must survive.
+      expect(analyse(scenarios.edgeTerminatedControl()).vantages.userConnection.status).not.toBe(
+        'unknown',
+      );
+    });
+
+    it('says what would make the route measurable', () => {
+      const summary = analyse(scenarios.edgeTerminatedControl()).vantages.networkPath.summary;
+      expect(summary).toMatch(/content delivery network/i);
+      expect(summary).toMatch(/directly/i);
+    });
+  });
+
+  describe('findings that never needed the control endpoint', () => {
+    /**
+     * `detectPathFindings` used to return early whenever the route could not be
+     * judged, which silently suppressed two findings that do not use the control
+     * measurement at all — `no-cdn` reads no browser evidence whatsoever. The
+     * effect was a local install quietly making fewer accusations than a hosted
+     * one about identical evidence.
+     */
+    const withoutCdn = (extra = {}) => makeEvidence({ cdn: null, ...extra });
+
+    it('reports a missing CDN however the control endpoint is deployed', () => {
+      const cases = {
+        remote: withoutCdn(),
+        loopback: withoutCdn({ controlIsLocal: true, clientRttSamples: [3, 3, 4, 3, 3] }),
+        unpaired: withoutCdn({ controlIsPaired: false }),
+        edge: withoutCdn({ controlIsEdgeTerminated: true }),
+        'no browser at all': withoutCdn({ clientRttSamples: null }),
+      };
+
+      for (const [name, evidence] of Object.entries(cases)) {
+        const codes = analyse(evidence).findings.map((f) => f.code);
+        expect(codes, name).toContain('no-cdn');
+      }
+    });
+  });
+
   describe('a control endpoint that is not another instance', () => {
     /**
      * CONTROL_URL may point anywhere the browser can reach, timed opaquely. That

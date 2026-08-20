@@ -1,7 +1,9 @@
 import type { ClientEvidence, Evidence, ServerEvidence, VantageHealth } from '@dwc/contracts';
 import { ms } from './findings/helpers.js';
+import { compareRoute } from './route.js';
 import { instabilityRatio, lossRatio } from './stats.js';
 import {
+  controlCanAnchorPath,
   controlIsLoopback,
   MIN_SAMPLES_FOR_VARIANCE,
   PATH_DEGRADATION,
@@ -301,35 +303,42 @@ export function assessNetworkPath(evidence: Evidence): VantageHealth & { excessM
     };
   }
 
-  // A loopback control gives us no idea what the user's internet actually costs,
-  // so there is nothing to subtract and no honest way to attribute the remainder.
-  if (controlIsLoopback(client)) {
-    return {
-      status: 'unknown',
-      label: 'The path between',
-      summary:
-        'Cannot be judged — this tool is running on your own machine, so there is no separate connection to compare against. Set CONTROL_URL to measure against an instance across the internet.',
-      score: null,
-      excessMs: null,
-    };
-  }
-
   /*
-   * An unpaired control endpoint measures the reader's link honestly and cannot
-   * be subtracted from their time to the target.
-   *
-   * The arithmetic below treats the baseline and the target measurement as
-   * comparable. They are not when the baseline came from an arbitrary endpoint:
-   * a large provider answers from whichever edge is nearest the reader, so the
-   * baseline is short by however far the target actually is, and the remainder
-   * this attributes to their provider is really the distance to the site.
+   * Three deployments make the subtraction below invalid, and they are one fault
+   * in three shapes — see `controlCanAnchorPath`. Each gets its own sentence,
+   * because "cannot be judged" is only useful to a reader who is told what would
+   * change it.
    */
-  if (!client.controlIsPaired) {
+  if (!controlCanAnchorPath(client)) {
+    /*
+     * The control cannot anchor the subtraction — but reference endpoints can
+     * still say something, because they compare destinations rather than
+     * vantages and so need nothing of our own deployment.
+     */
+    const route = compareRoute(client, server);
+    if (route !== null) {
+      const status: Band3 = route.readerPaysMore ? 'degraded' : 'ok';
+      return {
+        status,
+        label: 'The path between',
+        summary: route.readerPaysMore
+          ? `Reaching this site costs you about ${ms(route.gapMs)} more than reaching a well-connected reference, which is more than the site's own distance and response time explain.`
+          : 'Traffic is taking a sensible route — your time to this site is in line with what reaching a reference endpoint costs you.',
+        score: clampScore(route.readerPaysMore ? 65 : 95),
+        excessMs: route.readerPaysMore ? route.gapMs : null,
+      };
+    }
+
+    const why = controlIsLoopback(client)
+      ? 'this tool is running on your own machine, so there is no separate connection to compare against. Set CONTROL_URL to measure against an instance across the internet.'
+      : client.controlIsPaired === false
+        ? 'the baseline was measured against an endpoint that is not another instance of this tool, so there is nothing comparable to subtract. Point CONTROL_URL at a second instance to measure the route as well.'
+        : 'this instance sits behind a content delivery network, so your connection to it ended at an edge near you rather than at the machine itself. That baseline is too short to subtract from your time to the site — the leftover would be distance, not routing. Reaching this instance directly, without a CDN or tunnel in front, is what makes the route measurable.';
+
     return {
       status: 'unknown',
       label: 'The path between',
-      summary:
-        'Cannot be judged — the baseline was measured against an endpoint that is not another instance of this tool, so there is nothing comparable to subtract. Point CONTROL_URL at a second instance to measure the route as well.',
+      summary: `Cannot be judged — ${why}`,
       score: null,
       excessMs: null,
     };

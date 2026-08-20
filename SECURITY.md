@@ -41,9 +41,22 @@ Recorded because both are easy to reintroduce:
 
 ### Known limitation
 
-`AUTH_MODE=multiuser` is **not implemented**; it refuses to start rather than silently allowing
-access. `AUTH_MODE=none` is the default and is appropriate only for an instance you alone can reach.
+`AUTH_MODE=multiuser` is **not implemented**. The server starts and then refuses every authenticated
+request, so it fails closed rather than silently allowing access — but nothing behind it works.
+`AUTH_MODE=none` is the default and is appropriate only for an instance you alone can reach.
 **Set `AUTH_MODE=password` with `AUTH_PASSWORD` before exposing an instance to the internet.**
+
+`AUTH_MODE=password` is one shared secret, not user accounts. Everyone who signs in resolves to the
+same principal and therefore shares one report history — which is fine for a handful of testers and is
+not privacy between them. Two properties of the session are worth stating plainly rather than leaving
+to be discovered:
+
+- The cookie is a reversible encoding of the password, not a hash or a signed token. Anyone who obtains
+  it recovers the password. It is `HttpOnly`, and `Secure` whenever the request arrived over TLS.
+- There is no rotation and no revocation short of changing `AUTH_PASSWORD`, which signs everyone out.
+
+Signed sessions would fix both and are deliberately not in scope yet; the shared secret is already the
+weakest link, and hashing what is derived from it would protect nothing that is not already shared.
 
 ## Deploying safely
 

@@ -74,6 +74,27 @@ export interface Config {
    * surface here.
    */
   controlUrl: string | null;
+  /**
+   * Whether this instance sits behind a CDN edge.
+   *
+   * `null` means auto-detect from the headers of each request. `true`/`false`
+   * override it, for a frontend we do not recognise or for one we misread.
+   */
+  edgeTerminated: boolean | null;
+  /**
+   * Public endpoints the browser times alongside the target, to establish the
+   * reader's own floor. Empty unless set — these are third parties.
+   */
+  referenceUrls: string[];
+  /**
+   * What Fastify should believe about `X-Forwarded-For`.
+   *
+   * `false` unless set, and that default is the security-relevant part: with it
+   * on and nothing actually in front, any client can spoof the header and mint a
+   * fresh rate-limit bucket per request. Correct only when a proxy you control is
+   * guaranteed to be in front — the deployment DEPLOYMENT.md describes.
+   */
+  trustProxy: boolean | number | string[];
   logLevel: string;
 }
 
@@ -101,6 +122,63 @@ function controlOrigin(value: string | undefined): string | null {
   // Stored as a bare origin: the browser appends /api/ping, and a trailing path
   // or query on the configured value would produce a URL that 404s.
   return parsed.origin;
+}
+
+/**
+ * Absolute http(s) URLs, validated at boot rather than in the browser.
+ *
+ * Same treatment as CONTROL_URL: a typo should stop the server with a clear
+ * message, not surface later as a measurement that silently never happened.
+ * Unlike CONTROL_URL the path is kept — a reference endpoint is usually a
+ * specific cheap resource rather than an origin root.
+ */
+function referenceUrls(value: string | undefined): string[] {
+  const raw = value?.trim() ?? '';
+  if (raw === '') return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((candidate) => {
+      let parsed: URL;
+      try {
+        parsed = new URL(candidate);
+      } catch {
+        throw new Error(`REFERENCE_URLS must contain absolute URLs (got "${candidate}")`);
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+        throw new Error(`REFERENCE_URLS must be http or https (got "${parsed.protocol}")`);
+      }
+      return parsed.toString();
+    });
+}
+
+/** Unset means "work it out"; anything else is an explicit answer. */
+function tristate(value: string | undefined): boolean | null {
+  const raw = value?.trim().toLowerCase() ?? '';
+  if (raw === '') return null;
+  if (raw === 'true' || raw === '1' || raw === 'yes') return true;
+  if (raw === 'false' || raw === '0' || raw === 'no') return false;
+  throw new Error(`EDGE_TERMINATED must be true or false (got "${value ?? ''}")`);
+}
+
+/**
+ * Fastify accepts a boolean, a hop count, or a list of trusted addresses.
+ *
+ * Off unless asked for. Turning it on without a proxy in front lets any client
+ * set its own `X-Forwarded-For`, which defeats the per-IP rate limit that is the
+ * only brake on an instance running probes for strangers.
+ */
+function trustProxy(value: string | undefined): boolean | number | string[] {
+  const raw = value?.trim() ?? '';
+  if (raw === '' || raw.toLowerCase() === 'false') return false;
+  if (raw.toLowerCase() === 'true') return true;
+  const hops = Number(raw);
+  if (Number.isInteger(hops) && hops > 0) return hops;
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -140,6 +218,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     corsOrigins: list(env.CORS_ORIGINS, ['http://localhost:5173', 'http://localhost:4173']),
     controlUrl: controlOrigin(env.CONTROL_URL),
+    edgeTerminated: tristate(env.EDGE_TERMINATED),
+    referenceUrls: referenceUrls(env.REFERENCE_URLS),
+    trustProxy: trustProxy(env.TRUST_PROXY),
     logLevel: env.LOG_LEVEL ?? 'info',
   };
 }

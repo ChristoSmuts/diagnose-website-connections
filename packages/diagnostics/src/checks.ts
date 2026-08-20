@@ -1237,7 +1237,9 @@ function locationCheck(location: HostingLocation, link: Link): Check {
         provenance: 'inferred' as const,
       })),
       ...claims.map((claim) => ({
-        label: `Country claimed by ${claim.source}`,
+        // Short enough for a narrow evidence table, and still traceable: the
+        // source is what lets a reader check an inference rather than take it.
+        label: `Country — ${claim.source}`,
         value: claim.label,
         provenance: 'inferred' as const,
       })),
@@ -1507,6 +1509,22 @@ function pathChecks(evidence: Evidence, link: Link): Check[] {
 
   const path = assessNetworkPath(evidence);
 
+  /*
+   * A loopback round trip is not a statement about anyone's internet.
+   *
+   * `clientChecks` has guarded this figure since the WebKit incident, with a
+   * comment saying exactly that — and this check, one section away, printed the
+   * same number raw. On a laptop it read "Your round trip: 2 ms" wearing a
+   * measured badge, directly beneath a summary explaining that nothing could be
+   * judged because the tool was running on the reader's own machine.
+   *
+   * That is the Phase 1 bug verbatim: a loopback figure presented as the
+   * reader's connection. The number is only theirs if something across the
+   * internet produced it.
+   */
+  const controlIsMeaningful = !controlIsLoopback(client);
+  const controlRtt = controlIsMeaningful ? client.control.median : null;
+
   checks.push(
     check({
       id: 'path.excess',
@@ -1517,7 +1535,7 @@ function pathChecks(evidence: Evidence, link: Link): Check[] {
           ? 'unavailable'
           : bandStatus(path.status === 'ok' ? 'ok' : path.status),
       headline: path.excessMs === null ? null : ms(path.excessMs),
-      summary: path.status === 'unknown' ? path.summary : path.summary,
+      summary: path.summary,
       technical:
         path.excessMs === null
           ? "Not derivable. This needs your round trip to the control endpoint, the site's own response time, and your browser's time to reach the site. With any one missing there is nothing to subtract, and an estimate assembled from the rest would be invention rather than inference."
@@ -1532,8 +1550,13 @@ This is inferred and is reported as such throughout, which is also why confidenc
         },
         {
           label: 'Your round trip',
-          value: client.control.median === null ? 'not measured' : ms(client.control.median),
-          provenance: client.control.median === null ? 'unavailable' : 'measured',
+          value:
+            controlRtt === null
+              ? controlIsMeaningful
+                ? 'not measured'
+                : 'not measured — the control endpoint is on this machine'
+              : ms(controlRtt),
+          provenance: controlRtt === null ? 'unavailable' : 'measured',
         },
         {
           label: 'Site response time',
@@ -1575,6 +1598,13 @@ function clientChecks(client: ClientEvidence | null, link: Link): Check[] {
    */
   const loopback = controlIsLoopback(client);
 
+  /*
+   * The throughput test fetches from the page's own origin, never from the
+   * control endpoint — so it is loopback whenever the app itself is local,
+   * regardless of where CONTROL_URL points.
+   */
+  const loopbackTransfer = client.appIsLocal === true;
+
   checks.push(
     check({
       id: 'client.latency',
@@ -1592,16 +1622,25 @@ function clientChecks(client: ClientEvidence | null, link: Link): Check[] {
 
 This is reported as not measurable rather than healthy on purpose. Treating it as healthy meant every genuine round trip looked like unexplained excess, and the engine confidently blamed the reader's provider for latency it had never measured.`
         : `Latency to our own endpoint, independent of the site being tested. This is the load-bearing measurement in the whole report: without a baseline for your connection there is no way to separate "that site is slow" from "your connection is slow", and any tool claiming to do so without one is guessing. Healthy is under ${String(THRESHOLDS.clientRttMs.ok)} ms.`,
+      /*
+       * Every figure here describes the control round trip, so every one of them
+       * is meaningless over loopback — not just the median.
+       *
+       * The median was guarded and the 95th percentile beside it was not, so a
+       * local install printed a loopback percentile wearing a measured badge. The
+       * guard has to cover the whole set or it covers nothing.
+       */
       evidence: [
         { label: 'Samples', value: String(client.control.count) },
         {
           label: 'Median',
-          value: rtt === null ? 'not measured' : ms(rtt),
-          provenance: loopback ? 'unavailable' : 'measured',
+          value: loopback || rtt === null ? 'not measured' : ms(rtt),
+          provenance: loopback || rtt === null ? 'unavailable' : 'measured',
         },
         {
           label: '95th percentile',
-          value: client.control.p95 === null ? 'n/a' : ms(client.control.p95),
+          value: loopback || client.control.p95 === null ? 'not measured' : ms(client.control.p95),
+          provenance: loopback || client.control.p95 === null ? 'unavailable' : 'measured',
         },
       ],
       relatedFindings: link('client-high-latency'),
@@ -1626,8 +1665,8 @@ This is reported as not measurable rather than healthy on purpose. Treating it a
       evidence: [
         {
           label: 'Jitter',
-          value: jitter === null ? 'not measured' : ms(jitter),
-          provenance: loopback ? 'unavailable' : 'measured',
+          value: loopback || jitter === null ? 'not measured' : ms(jitter),
+          provenance: loopback || jitter === null ? 'unavailable' : 'measured',
         },
       ],
       relatedFindings: link('client-high-jitter'),
@@ -1667,45 +1706,57 @@ This is reported as not measurable rather than healthy on purpose. Treating it a
       id: 'client.throughput',
       phase: 'client',
       title: 'Connection speed',
+      /*
+       * Loopback again, by a different route.
+       *
+       * The transfer always comes from the page's own origin, so on a local
+       * install it crosses no network at all — and reported around 11 MB/s as
+       * though it were the reader's line. Their round trip has been guarded since
+       * Phase 1; their bandwidth was measured the same way and never was.
+       */
       status:
         tp === null || !tp.consented
           ? 'skipped'
-          : tp.downloadBps.value === null
+          : loopbackTransfer || tp.downloadBps.value === null
             ? 'unavailable'
             : 'pass',
       headline:
-        tp?.downloadBps.value === undefined || tp.downloadBps.value === null
+        loopbackTransfer || tp?.downloadBps.value === undefined || tp.downloadBps.value === null
           ? null
           : `${(tp.downloadBps.value / 125_000).toFixed(1)} Mbps`,
       summary:
         tp === null || !tp.consented
           ? 'Not run: the speed test is off by default because it uses your data.'
-          : tp.downloadBps.value === null
-            ? 'The speed test did not complete.'
-            : `Measured about ${(tp.downloadBps.value / 125_000).toFixed(1)} Mbps down.`,
+          : loopbackTransfer
+            ? 'Not measurable — this tool is running on your own machine, so the transfer never left it.'
+            : tp.downloadBps.value === null
+              ? 'The speed test did not complete.'
+              : `Measured about ${(tp.downloadBps.value / 125_000).toFixed(1)} Mbps down.`,
       technical:
         tp === null || !tp.consented
           ? 'Throughput measurement is opt-in. It transfers several megabytes, which costs real money on a metered connection, so it is never run without being asked for — and it is the least important of the client measurements, since latency and loss explain far more slow-page complaints than bandwidth does.'
-          : 'Measured with an adaptive ramp against our own endpoint and hard-capped in both bytes and seconds. Treat it as an order of magnitude rather than a precise figure: a browser cannot saturate a fast link reliably, and any single-connection test understates a high-bandwidth line.',
+          : 'One download and one upload against our own endpoint, hard-capped in both bytes and seconds. Treat it as an order of magnitude rather than a precise figure, and as a floor rather than a ceiling: a single short transfer spends much of its life in TCP slow start, so a genuinely fast link measures slower than it is. There is no ramp and no repetition — this is a sanity check, not a speed test.',
       evidence:
         tp === null
           ? []
           : [
               {
                 label: 'Download',
-                value:
-                  tp.downloadBps.value === null
+                value: loopbackTransfer
+                  ? 'not measured'
+                  : tp.downloadBps.value === null
                     ? 'not measured'
                     : `${formatBytes(tp.downloadBps.value)}/s`,
-                provenance: tp.downloadBps.provenance,
+                provenance: loopbackTransfer ? 'unavailable' : tp.downloadBps.provenance,
               },
               {
                 label: 'Upload',
-                value:
-                  tp.uploadBps.value === null
+                value: loopbackTransfer
+                  ? 'not measured'
+                  : tp.uploadBps.value === null
                     ? 'not measured'
                     : `${formatBytes(tp.uploadBps.value)}/s`,
-                provenance: tp.uploadBps.provenance,
+                provenance: loopbackTransfer ? 'unavailable' : tp.uploadBps.provenance,
               },
             ],
       relatedFindings: link('client-low-throughput'),

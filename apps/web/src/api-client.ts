@@ -31,6 +31,11 @@ export class ApiError extends Error {
   get isRateLimited(): boolean {
     return this.status === 429 || this.code === 'rate-limited';
   }
+
+  /** True when this instance wants a password and has not been given one. */
+  get needsPassword(): boolean {
+    return this.status === 401 || this.code === 'unauthorized';
+  }
 }
 
 /**
@@ -104,6 +109,19 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  /**
+   * Exchange the shared password for a session cookie.
+   *
+   * The cookie is HttpOnly, so nothing here can read it back — a successful
+   * response is the only signal, and every later request carries it implicitly.
+   */
+  signIn: (password: string) =>
+    json<{ ok: boolean }>('/api/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password }),
+    }),
+
   health: () =>
     json<{
       status: string;
@@ -111,6 +129,10 @@ export const api = {
       authMode: string;
       /** Null means same-origin. See CONTROL_URL in the API config. */
       controlUrl: string | null;
+      /** Whether this request reached the instance through a CDN edge. */
+      edgeTerminated: boolean;
+      /** Third-party endpoints to time alongside the target. Usually empty. */
+      referenceUrls: string[];
     }>('/api/health'),
 
   listSites: (include: 'active' | 'archived' | 'all' = 'active') =>

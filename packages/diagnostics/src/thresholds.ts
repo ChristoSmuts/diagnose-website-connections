@@ -142,6 +142,44 @@ export function controlIsLoopback(client: {
 }
 
 /**
+ * Whether the control measurement may be subtracted from the reader's time to
+ * the target.
+ *
+ * Three deployments break that subtraction, and they are one fault wearing three
+ * hats: **the baseline is nearer than the target, so the remainder is distance
+ * rather than routing.**
+ *
+ * 1. Loopback — the control is on the reader's own machine. Distance zero.
+ * 2. Unpaired — `CONTROL_URL` points at some public endpoint rather than another
+ *    instance. Large providers answer from the edge nearest the reader, so again
+ *    the baseline is as short as the internet gets.
+ * 3. Edge-terminated — the control *is* another instance, but it sits behind a
+ *    CDN or a tunnel, so the reader's connection ended at a nearby point of
+ *    presence and never reached the machine.
+ *
+ * In all three the leftover the route verdict would attribute to the reader's
+ * provider is really the distance to the site. Blaming an ISP for geography is
+ * the same error as blaming one for loopback, and this project has now shipped
+ * that error twice.
+ *
+ * Note what this does *not* gate: "your connection". An edge-terminated or
+ * unpaired baseline still describes the reader's own link honestly — better than
+ * a distant origin would, since it is closer to a pure last-mile measurement.
+ * Only the subtraction is invalid.
+ */
+export function controlCanAnchorPath(client: {
+  controlIsLocal?: boolean;
+  controlIsPaired?: boolean;
+  controlIsEdgeTerminated?: boolean;
+  control: { median: number | null };
+}): boolean {
+  if (controlIsLoopback(client)) return false;
+  if (client.controlIsPaired === false) return false;
+  if (client.controlIsEdgeTerminated === true) return false;
+  return true;
+}
+
+/**
  * Samples required before response-time variance may influence the verdict.
  *
  * An IQR from three requests is dominated by noise: one unlucky response makes a

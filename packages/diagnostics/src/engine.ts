@@ -13,7 +13,7 @@ import { assessNetworkPath, assessServer, assessUserConnection } from './vantage
  * produced a conclusion is what stops an old stored report from being
  * reinterpreted under rules that did not exist when it was taken.
  */
-export const ENGINE_VERSION = '1.3.0';
+export const ENGINE_VERSION = '1.4.0';
 
 /**
  * Turn evidence into a verdict.

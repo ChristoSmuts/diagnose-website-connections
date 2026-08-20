@@ -126,30 +126,34 @@ file out of the image, so nothing in it is baked into a layer.
 
 ### Variables
 
-| Variable                | Default                                       | Notes                                                      |
-| ----------------------- | --------------------------------------------- | ---------------------------------------------------------- |
-| `PORT`                  | `8787`                                        |                                                            |
-| `HOST`                  | `0.0.0.0`                                     |                                                            |
-| `AUTH_MODE`             | `none`                                        | `none` \| `password` \| `multiuser` — see below            |
-| `AUTH_PASSWORD`         | —                                             | Required when `AUTH_MODE=password`                         |
-| `DATABASE_PATH`         | `./data/dwc.db`                               | One file. Backup = copy it.                                |
-| `CORS_ORIGINS`          | `http://localhost:5173,http://localhost:4173` | Only matters when the app and API are on different origins |
-| `LOG_LEVEL`             | `info`                                        | `trace` through `fatal`                                    |
-| `DNS_RESOLVERS`         | `1.1.1.1,8.8.8.8,9.9.9.9`                     | Explicit, never the host's resolver                        |
-| `STABILITY_SAMPLES`     | `5`                                           | Below 5, variance is treated as noise                      |
-| `CONTROL_URL`           | —                                             | See below. Unset means same-origin                         |
-| `RATE_LIMIT_PER_MINUTE` | `20`                                          | Diagnostics per client IP. Reads are not counted           |
-| `READS_PER_MINUTE`      | `600`                                         | Everything else per client IP. A runaway-client backstop   |
-| `MAX_REDIRECTS`         | `10`                                          | Per diagnostic, re-validated at every hop                  |
-| `MAX_RESPONSE_BYTES`    | `5000000`                                     | Body bytes read before the probe stops reading             |
-| `TIMEOUT_DNS_MS`        | `5000`                                        |                                                            |
-| `TIMEOUT_CONNECT_MS`    | `8000`                                        |                                                            |
-| `TIMEOUT_TLS_MS`        | `8000`                                        |                                                            |
-| `TIMEOUT_HTTP_MS`       | `15000`                                       |                                                            |
-| `TIMEOUT_TOTAL_MS`      | `45000`                                       | The whole run, across every phase                          |
-| `API_URL`               | `http://127.0.0.1:8787`                       | Development only — where Vite proxies `/api`               |
+| Variable                | Default                                       | Notes                                                                        |
+| ----------------------- | --------------------------------------------- | ---------------------------------------------------------------------------- |
+| `PORT`                  | `8787`                                        |                                                                              |
+| `HOST`                  | `0.0.0.0`                                     |                                                                              |
+| `AUTH_MODE`             | `none`                                        | `none` \| `password` \| `multiuser` — see below                              |
+| `AUTH_PASSWORD`         | —                                             | Required when `AUTH_MODE=password`                                           |
+| `DATABASE_PATH`         | `./data/dwc.db`                               | One file. Backup = copy it.                                                  |
+| `CORS_ORIGINS`          | `http://localhost:5173,http://localhost:4173` | Only matters when the app and API are on different origins                   |
+| `LOG_LEVEL`             | `info`                                        | `trace` through `fatal`                                                      |
+| `DNS_RESOLVERS`         | `1.1.1.1,8.8.8.8,9.9.9.9`                     | Explicit, never the host's resolver                                          |
+| `STABILITY_SAMPLES`     | `5`                                           | Below 5, variance is treated as noise                                        |
+| `CONTROL_URL`           | —                                             | See below. Unset means same-origin                                           |
+| `RATE_LIMIT_PER_MINUTE` | `20`                                          | Diagnostics per client IP. Reads are not counted                             |
+| `READS_PER_MINUTE`      | `600`                                         | Everything else per client IP. A runaway-client backstop                     |
+| `MAX_REDIRECTS`         | `10`                                          | Per diagnostic, re-validated at every hop                                    |
+| `MAX_RESPONSE_BYTES`    | `5000000`                                     | Body bytes read before the probe stops reading                               |
+| `TIMEOUT_DNS_MS`        | `5000`                                        |                                                                              |
+| `TIMEOUT_CONNECT_MS`    | `8000`                                        |                                                                              |
+| `TIMEOUT_TLS_MS`        | `8000`                                        |                                                                              |
+| `TIMEOUT_HTTP_MS`       | `15000`                                       |                                                                              |
+| `TIMEOUT_TOTAL_MS`      | `45000`                                       | The whole run, across every phase                                            |
+| `TRUST_PROXY`           | —                                             | Believe `X-Forwarded-For`. Needed behind a reverse proxy, unsafe without one |
+| `EDGE_TERMINATED`       | auto-detected                                 | Override CDN detection. Decides whether the route can be judged              |
+| `REFERENCE_URLS`        | —                                             | Public endpoints timed alongside the target. Third parties, opt-in           |
+| `API_URL`               | `http://127.0.0.1:8787`                       | Development only — where Vite proxies `/api`                                 |
 
-`AUTH_MODE=multiuser` is declared but not implemented, and refuses to start rather than pretending.
+`AUTH_MODE=multiuser` is declared but not implemented. The server starts and then refuses every
+authenticated request, which fails closed — but it is not a usable mode, and nothing behind it works.
 
 ### Measuring your own connection from a local install
 
@@ -268,14 +272,15 @@ See [CLAUDE.md](CLAUDE.md) for the constraints that are not obvious from the cod
 
 ## Documentation
 
-|                                    |                                                                              |
-| ---------------------------------- | ---------------------------------------------------------------------------- |
-| [CLAUDE.md](CLAUDE.md)             | Architecture, the honesty invariants, and the constraints that will bite you |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, the verify gate, how to add a finding, a check, or an icon            |
-| [VERSIONING.md](VERSIONING.md)     | The three separate version numbers and what each one means                   |
-| [SECURITY.md](SECURITY.md)         | Threat model, the SSRF defences, and how to report an issue                  |
-| [CHANGELOG.md](CHANGELOG.md)       | What changed, including what is deliberately not done yet                    |
-| [.env.example](.env.example)       | Every configuration variable, annotated, ready to copy to `.env`             |
+|                                    |                                                                                          |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| [CLAUDE.md](CLAUDE.md)             | Architecture, the honesty invariants, and the constraints that will bite you             |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Setup, the verify gate, how to add a finding, a check, or an icon                        |
+| [VERSIONING.md](VERSIONING.md)     | The three separate version numbers and what each one means                               |
+| [SECURITY.md](SECURITY.md)         | Threat model, the SSRF defences, and how to report an issue                              |
+| [CHANGELOG.md](CHANGELOG.md)       | What changed, including what is deliberately not done yet                                |
+| [DEPLOYMENT.md](DEPLOYMENT.md)     | Hosting an instance other people can reach, and the choice that decides what it measures |
+| [.env.example](.env.example)       | Every configuration variable, annotated, ready to copy to `.env`                         |
 
 ## Licence
 

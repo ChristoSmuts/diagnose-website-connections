@@ -17,6 +17,7 @@ import {
   RunningReportError,
   type Repositories,
 } from '@dwc/persistence';
+import compress from '@fastify/compress';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
@@ -32,7 +33,8 @@ import Fastify, {
 // version the deployment stopped being months ago — it had already drifted once.
 import rootManifest from '../../../package.json' with { type: 'json' };
 import type { Config } from './config.ts';
-import { resolvePrincipal, expectedToken } from './principal.ts';
+import { detectEdge } from './edge.ts';
+import { resolvePrincipal, expectedToken, matchesToken } from './principal.ts';
 import { probeIcon } from './probes/icon.ts';
 import { runServerProbe } from './probes/run.ts';
 import { BlockedTargetError, InvalidUrlError, normalizeUrl } from './safety/ssrf.ts';
@@ -49,9 +51,28 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
 
   const app = Fastify({
     logger: { level: config.logLevel },
+    // Off unless configured. See TRUST_PROXY in config.ts for why the default
+    // matters: with it on and nothing in front, a client can pick its own
+    // rate-limit bucket.
+    trustProxy: config.trustProxy,
     // Diagnostics legitimately take tens of seconds; the default would abort
     // a perfectly healthy probe mid-flight.
     requestTimeout: config.timeouts.totalMs + 15_000,
+  });
+
+  /*
+   * Compress the app, never the measurements.
+   *
+   * 276 KB of JavaScript was going over the wire uncompressed whenever nothing
+   * was in front of the container — and the container should not depend on what
+   * is. `/api/download` opts out explicitly: it sends incompressible bytes with
+   * `content-encoding: identity` on purpose, because the point is to measure the
+   * link rather than a compressor.
+   */
+  await app.register(compress, {
+    global: true,
+    encodings: ['br', 'gzip', 'deflate'],
+    threshold: 1024,
   });
 
   await app.register(helmet, { contentSecurityPolicy: false });
@@ -166,11 +187,23 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
    * `authMode` does: both answer "how is this instance set up", both are read
    * once at startup, and neither is worth a second round trip.
    */
-  app.get('/api/health', { config: { rateLimit: false } }, () => ({
+  app.get('/api/health', { config: { rateLimit: false } }, (request) => ({
     status: 'ok' as const,
     version: rootManifest.version,
     authMode: config.authMode,
     controlUrl: config.controlUrl,
+    /*
+     * Whether the browser's connection to us ended at a CDN edge.
+     *
+     * The browser cannot work this out for itself — from out there a
+     * CDN-fronted instance and a directly-reachable one look identical — so the
+     * endpoint that received the request has to say. It decides the route
+     * verdict, which is why this rides along with the other deployment facts
+     * rather than being inferred from a timing.
+     */
+    edgeTerminated: config.edgeTerminated ?? detectEdge(request.headers),
+    /** Third-party endpoints the browser should time. Empty unless configured. */
+    referenceUrls: config.referenceUrls,
   }));
 
   /**
@@ -184,45 +217,93 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
     void reply.header('cache-control', 'no-store').send({ t: Date.now() });
   });
 
-  /** Deterministic payload for the browser's download throughput test. */
-  app.get('/api/download', { config: { rateLimit: false } }, (request, reply) => {
-    const query = request.query as { bytes?: string };
-    const requested = Number(query.bytes ?? 1_000_000);
-    // Capped: this is the user's bandwidth being spent.
-    const size = Math.min(Math.max(Number.isFinite(requested) ? requested : 0, 1), 8_000_000);
+  /*
+   * Deterministic payload for the browser's download throughput test.
+   *
+   * Authenticated and rate-limited, unlike its neighbours. `/api/ping` and
+   * `/api/health` stay open because they are tiny and because a paired instance
+   * is queried by a browser holding no session with it — this one hands out up to
+   * 8 MB per call, which on a metered free tier is a bandwidth cannon anyone
+   * could point at the host. The browser running a probe holds the cookie, so
+   * the throughput test is unaffected.
+   */
+  app.get(
+    '/api/download',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' }, compress: false } },
+    (request, reply) => {
+      const principal = requirePrincipal(request, reply);
+      if (principal === null) return reply;
 
-    void reply
-      .header('content-type', 'application/octet-stream')
-      .header('cache-control', 'no-store')
-      // Incompressible, so we measure the link rather than the compressor.
-      .header('content-encoding', 'identity')
-      .send(Buffer.allocUnsafe(size));
-  });
+      const query = request.query as { bytes?: string };
+      const requested = Number(query.bytes ?? 1_000_000);
+      // Capped: this is the user's bandwidth being spent.
+      const size = Math.min(Math.max(Number.isFinite(requested) ? requested : 0, 1), 8_000_000);
 
-  app.post('/api/upload', { config: { rateLimit: false } }, (request, reply) => {
-    void reply.header('cache-control', 'no-store').send({ received: true, at: Date.now() });
-    void request;
-  });
+      return (
+        reply
+          .header('content-type', 'application/octet-stream')
+          .header('cache-control', 'no-store')
+          // Incompressible, so we measure the link rather than the compressor.
+          .header('content-encoding', 'identity')
+          .send(Buffer.allocUnsafe(size))
+      );
+    },
+  );
 
-  app.post('/api/session', (request, reply) => {
-    if (config.authMode !== 'password') {
-      return reply.status(400).send({
-        error: { code: 'invalid-url', message: 'This instance does not use a password.' },
-      });
-    }
-    const body = request.body as { password?: string };
-    if (body.password !== config.password) {
+  app.post(
+    '/api/upload',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    (request, reply) => {
+      const principal = requirePrincipal(request, reply);
+      if (principal === null) return reply;
+      return reply.header('cache-control', 'no-store').send({ received: true, at: Date.now() });
+    },
+  );
+
+  /*
+   * Ten attempts a minute, not six hundred.
+   *
+   * This route was covered only by the global read limit, which is sized for
+   * page loads. A shared password behind a 600-a-minute budget is a password
+   * that can be worked through.
+   */
+  app.post(
+    '/api/session',
+    { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } },
+    (request, reply) => {
+      if (config.authMode !== 'password') {
+        return reply.status(400).send({
+          error: { code: 'invalid-url', message: 'This instance does not use a password.' },
+        });
+      }
+      const body = request.body as { password?: string };
+      if (
+        typeof body.password !== 'string' ||
+        !matchesToken(body.password, config.password ?? ' ')
+      ) {
+        return reply
+          .status(401)
+          .send({ error: { code: 'unauthorized', message: 'That password is not correct.' } });
+      }
+
+      /*
+       * Secure only when the request actually arrived over TLS.
+       *
+       * Setting it unconditionally would break a plain-HTTP instance on a trusted
+       * network, since the browser would refuse to store the cookie and the login
+       * would appear to succeed and then silently fail. `request.protocol` reads
+       * X-Forwarded-Proto only when TRUST_PROXY is on, which is exactly when a
+       * reverse proxy is the thing terminating TLS.
+       */
+      const secure = request.protocol === 'https' ? ' Secure;' : '';
       return reply
-        .status(401)
-        .send({ error: { code: 'unauthorized', message: 'That password is not correct.' } });
-    }
-    return reply
-      .header(
-        'set-cookie',
-        `dwc_session=${expectedToken(config)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=2592000`,
-      )
-      .send({ ok: true });
-  });
+        .header(
+          'set-cookie',
+          `dwc_session=${expectedToken(config)}; HttpOnly;${secure} SameSite=Lax; Path=/; Max-Age=2592000`,
+        )
+        .send({ ok: true });
+    },
+  );
 
   // --- sites ---------------------------------------------------------------
 

@@ -87,6 +87,23 @@ This hid for a long time because a previous build always left `dist` behind loca
 first time CI ran the gate on a fresh checkout. **Do not reorder `verify` to put lint first** for
 faster feedback: it is only faster when it is wrong.
 
+### `[hidden]` cannot be overridden, even with `!important`
+
+The HTML rendering spec gives `[hidden]` a user-agent rule of `display: none !important`, and a UA
+`!important` beats an author `!important`. So a `@media print` rule trying to force a collapsed section
+open silently loses. `dwc-check-row` hid its detail that way for a long time, which meant printing a
+report gave you headings and no content — the exact thing its six print rules exist to prevent. Collapse
+with a class or an attribute selector when print has to be able to reopen it. `display: none` removes
+the element from the accessibility tree just as the attribute did.
+
+### Breakpoints live where no default viewport is
+
+There are four (`32rem`, `34rem`, `48rem`, `60rem`) and only one is a `@media` query — the rest are
+container queries sized by the **content column**, which moves 15.5 rem when the rail collapses. So the
+same viewport renders two layouts depending on sidebar state, and resizing the browser alone cannot
+exercise them. `e2e/specs/breakpoints.spec.ts` sweeps each threshold and either side; before it existed
+the suite ran at 412 px and 1280 px and crossed none of them.
+
 ### `.env` resolves from the module, not the working directory
 
 `pnpm dev` starts the API with cwd `apps/api`; the e2e harness starts the same file from the repo root.

@@ -55,6 +55,14 @@ export default defineConfig({
   },
   build: {
     target: 'es2022',
-    sourcemap: true,
+    /*
+     * Not in production builds.
+     *
+     * The map is 850 KB — three times the bundle — and it was being copied into
+     * the container and served publicly, on a deployment whose bandwidth is
+     * metered. Development and preview keep it, which is where anyone actually
+     * debugging this is standing.
+     */
+    sourcemap: process.env.NODE_ENV !== 'production',
   },
 });

@@ -342,11 +342,11 @@ export function countryClaims(input: {
     claims.push({ country: code, label: countryLabel(code) ?? code, source });
   };
 
-  add(input.network.country, 'routing registry, for the announced prefix');
-  add(input.network.asnCountry, 'routing registry, for the network operator');
-  for (const pop of input.pops) add(pop.country, `edge location in ${pop.source}`);
-  for (const region of input.regions) add(region.country, 'cloud region in reverse DNS');
-  add(input.certCountry, 'certificate subject');
+  add(input.network.country, 'registry, prefix');
+  add(input.network.asnCountry, 'registry, operator');
+  for (const pop of input.pops) add(pop.country, `edge header ${pop.source}`);
+  for (const region of input.regions) add(region.country, 'reverse DNS');
+  add(input.certCountry, 'certificate');
 
   return claims;
 }
