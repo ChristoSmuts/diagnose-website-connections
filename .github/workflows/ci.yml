@@ -15,9 +15,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           # Pinned to the same major as .nvmrc. Local and CI drifting apart is a
           # common source of TLS and DNS differences in exactly this kind of app.
@@ -30,6 +30,17 @@ jobs:
       - name: Formatting
         run: pnpm run format:check
 
+      # Before lint, not after, and that ordering is load-bearing.
+      #
+      # The lint rules are type-aware, and every workspace package publishes its
+      # types from `dist`. On a clean checkout there is no `dist`, so
+      # typescript-eslint cannot resolve `@dwc/contracts` or `@dwc/diagnostics`
+      # and reports every use of them as an unresolved-type error — dozens of
+      # them, none real, all pointing at innocent lines. It passed locally only
+      # because a previous build had left `dist` behind.
+      - name: Build
+        run: pnpm run build
+
       - name: Lint
         run: pnpm run lint
 
@@ -38,9 +49,6 @@ jobs:
 
       - name: Unit and integration tests
         run: pnpm run test
-
-      - name: Build
-        run: pnpm run build
 
       # The probe engine is useless if it cannot actually reach the internet, so
       # CI runs a real diagnostic against a known-good host. It also catches
@@ -73,9 +81,9 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.62.1-noble
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           cache: pnpm
@@ -93,7 +101,7 @@ jobs:
 
       - name: Upload traces, screenshots and visual diffs
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
@@ -106,7 +114,7 @@ jobs:
     needs: verify
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Verify the container builds
         run: docker build -t dwc/diagnostics:ci .

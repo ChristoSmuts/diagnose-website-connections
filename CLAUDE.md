@@ -75,6 +75,18 @@ trustworthy about attribution.
 
 ## Constraints that will bite you
 
+### Lint needs `dist`, so `verify` builds first
+
+The ESLint config is type-aware and every workspace package publishes its types from `dist`. On a clean
+checkout there is none, so typescript-eslint cannot resolve `@dwc/contracts` or `@dwc/diagnostics` and
+reports every use of them as an unresolved-type error — dozens of them, on innocent lines, saying
+nothing about the code. `pnpm run verify` therefore runs `turbo run build` **before** `pnpm run lint`,
+and `.github/workflows/ci.yml` orders its steps the same way.
+
+This hid for a long time because a previous build always left `dist` behind locally. It surfaced the
+first time CI ran the gate on a fresh checkout. **Do not reorder `verify` to put lint first** for
+faster feedback: it is only faster when it is wrong.
+
 ### `.env` resolves from the module, not the working directory
 
 `pnpm dev` starts the API with cwd `apps/api`; the e2e harness starts the same file from the repo root.
