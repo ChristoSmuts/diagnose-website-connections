@@ -69,6 +69,25 @@ export interface ReportRepository {
    * cannot be rewritten.
    */
   complete(id: string, evidence: Evidence, verdict: Verdict): Report | null;
+  /**
+   * Attaches the browser half of the same run, and only ever once.
+   *
+   * This is the finish of a diagnostic rather than a second edit of a finished
+   * one. The browser cannot start measuring until the server has answered, so its
+   * evidence necessarily arrives seconds after the row is written — and leaving it
+   * unsaved meant reopening a report showed "your connection: not measured" about
+   * a run that had measured it perfectly well.
+   *
+   * Refusing when client evidence is already present is what keeps the
+   * immutability rule intact: a report can be completed, never rewritten, and a
+   * re-run is still a new row.
+   */
+  attachClientEvidence(
+    principalId: string,
+    id: string,
+    evidence: Evidence,
+    verdict: Verdict,
+  ): Report | null;
   fail(id: string, error: string): Report | null;
   findById(principalId: string, id: string): Report | null;
   listForSite(

@@ -566,8 +566,24 @@ export async function buildServer(options: BuildOptions): Promise<FastifyInstanc
       const merged: Evidence = { ...report.evidence, client: body.client };
       const verdict = analyse(merged);
 
-      // The stored report is immutable, so the revised verdict is returned for
-      // display rather than written over the original record.
+      /*
+       * Saved, so revisiting the report shows what was actually measured.
+       *
+       * The browser half belongs to this run and cannot start until the server
+       * half has answered, so it necessarily arrives after the row is written.
+       * Leaving it in memory meant a report that had measured the reader's
+       * connection went back to claiming it had not, the moment they clicked away
+       * and returned — and the stored verdict is what a re-open, an export and the
+       * sidebar's culprit dot all read from.
+       *
+       * `attachClientEvidence` writes only into the gap where no client evidence
+       * exists, so this completes a report and can never rewrite one. A second
+       * submission returns null and changes nothing; the revised verdict is still
+       * returned for display, because it is correct either way and the caller has
+       * no use for the difference.
+       */
+      repos.reports.attachClientEvidence(principal.id, body.reportId, merged, verdict);
+
       return reply.send({ verdict, evidence: merged });
     } catch (error) {
       return fail(reply, error);

@@ -100,10 +100,29 @@ the catastrophe nothing else looks for — a stylesheet that failed to load, a t
 a page that renders blank. Everything else about layout is asserted by measurement, which fails with the
 offending element named rather than with a diff to squint at.
 
-Baselines are **Linux-only**, because font rasterisation differs by platform and a baseline taken on a
-developer machine can never match CI. They skip everywhere else.
+All three are clipped to the content column, the report shots open a **seeded** report rather than
+running a live diagnostic, and nothing is masked. Each of those is load-bearing. The sidebar accumulates
+whatever earlier specs left in the shared database, and a live verdict flips between wordings — and
+colours — when the target drifts by a few tens of milliseconds; masking hides content but not size, so
+neither could be masked away. A stored verdict renders identically every run, which is what lets the
+whole column be compared instead of a handful of survivors. See `e2e/global-setup.ts`.
 
-To regenerate after an intentional design change: run the **CI** workflow manually with
+The specs emulate `prefers-reduced-motion`, because the score dial counts up in JavaScript and
+Playwright's `animations: 'disabled'` settles CSS animations only.
+
+Baselines are **Linux-only**, because font rasterisation differs by platform and a baseline taken on a
+Windows or macOS machine can never match CI. That does not mean they can only be made on GitHub —
+"the same Linux" is available locally too, in the container the `e2e` job already uses:
+
+```bash
+./scripts/update-visual-baselines.sh
+```
+
+It pulls `mcr.microsoft.com/playwright:v1.62.1-noble`, builds and runs the suite inside it, and copies
+the PNGs back into `e2e/specs/visual.spec.ts-snapshots/` for you to review and commit. On Windows, run
+it from WSL, where Docker lives. The source tree is copied into the container rather than mounted, so a
+Linux `pnpm install` never lands on top of your Windows `node_modules`.
+
+The CI route still exists and is the right one when you have no Docker: run the **CI** workflow with
 `update_snapshots` set to true, download the `visual-baselines` artifact, and commit the PNGs it
-contains. That job runs in the same Playwright container CI compares against, which is the only
-environment that produces matching images.
+contains. Both routes run the same image, so they produce the same images.

@@ -86,63 +86,82 @@ test.describe('the confirmation dialog', () => {
   });
 });
 
-test.describe('the speed-test switch', () => {
+test.describe('the speed-test option', () => {
   /**
-   * The control that decides whether the run spends the reader's data, and until
-   * now the only interactive thing on the landing page with no coverage at all.
+   * The reason this suite cannot simply click the row.
    *
-   * It replaced a bare `<input type="checkbox">`, so these assert the behaviour a
-   * checkbox gave for free and a custom element has to earn back: a real toggle,
-   * a state a screen reader can read, and keyboard operation.
+   * The throughput test transfers against the page's own origin, never the
+   * control endpoint — so on a local install it never leaves the machine. The app
+   * therefore hides the option entirely rather than offering something it cannot
+   * deliver, and this harness is loopback by definition, so the row is absent
+   * here exactly as it is on a laptop install.
    */
-  const toggle = (page: Page) => page.locator('dwc-switch');
-
-  test('toggles on click and reports its state to assistive technology', async ({ page }) => {
+  test('is not offered when the app is served from the reader’s own machine', async ({ page }) => {
     await openApp(page);
 
-    const control = toggle(page).getByRole('switch');
-    await expect(control).toHaveAttribute('aria-checked', 'false');
+    await expect(page.locator('dwc-switch')).toHaveCount(0);
+    await expect(page.getByText(/measure my connection speed/i)).toHaveCount(0);
+  });
+});
 
+/**
+ * The switch itself, mounted directly.
+ *
+ * `dwc-switch` is registered by the app bundle but only rendered on a non-local
+ * install, which a loopback harness can never be. Driving the element on its own
+ * is the honest way to keep its contract covered: these assert the behaviour a
+ * plain `<input type="checkbox">` gave for free and a custom element has to earn
+ * back — a real toggle, a state assistive technology can read, keyboard
+ * operation, and a hit area the rest of the app would accept.
+ */
+test.describe('dwc-switch', () => {
+  const mount = async (page: Page): Promise<void> => {
+    await openApp(page);
+    await page.evaluate(() => {
+      const el = document.createElement('dwc-switch');
+      el.setAttribute('aria-label', 'Measure my connection speed too');
+      el.id = 'probe-switch';
+      document.body.append(el);
+    });
+    await expect(page.locator('#probe-switch')).toBeVisible();
+  };
+
+  test('toggles on click and reports its state to assistive technology', async ({ page }) => {
+    await mount(page);
+    const control = page.locator('#probe-switch').getByRole('switch');
+
+    await expect(control).toHaveAttribute('aria-checked', 'false');
     await control.click();
     await expect(control).toHaveAttribute('aria-checked', 'true');
-
     await control.click();
     await expect(control).toHaveAttribute('aria-checked', 'false');
   });
 
   test('toggles from the keyboard with Space', async ({ page }) => {
-    await openApp(page);
+    await mount(page);
+    const control = page.locator('#probe-switch').getByRole('switch');
 
-    const control = toggle(page).getByRole('switch');
     await control.focus();
     await page.keyboard.press(' ');
-
     await expect(control).toHaveAttribute('aria-checked', 'true');
   });
 
-  /**
-   * The row is a click target as well as the switch, so a click that passes
-   * through the switch must not be counted by both and cancel itself out.
-   */
-  test('toggles once when the surrounding row is clicked', async ({ page }) => {
-    await openApp(page);
+  test('reflects its state to the host so a surrounding row can style itself', async ({ page }) => {
+    await mount(page);
 
-    const control = toggle(page).getByRole('switch');
-    // Somewhere on the row that is definitely not the switch.
-    await page.getByText('Measure my connection speed too').click();
-
-    await expect(control).toHaveAttribute('aria-checked', 'true');
+    await page.locator('#probe-switch').getByRole('switch').click();
+    await expect(page.locator('#probe-switch')).toHaveAttribute('checked', '');
   });
 
   /**
    * A 1.1rem checkbox was the previous control, well under the tap target the
-   * rest of the app holds to and the likeliest thing on this page to be reached
+   * rest of the app holds to and the likeliest thing on that page to be reached
    * for on a phone.
    */
   test('offers a tap target the rest of the app would accept', async ({ page }) => {
-    await openApp(page);
+    await mount(page);
 
-    const box = await toggle(page).getByRole('switch').boundingBox();
+    const box = await page.locator('#probe-switch').getByRole('switch').boundingBox();
     expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   });

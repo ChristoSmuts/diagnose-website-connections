@@ -2,6 +2,7 @@ import type { Culprit } from '@dwc/contracts';
 import { LitElement, css, html, type TemplateResult } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 import { sharedStyles } from '../styles/shared.js';
+import { verdictTone, type ToneMode } from '../utils/score.js';
 import './dwc-badge.js';
 import './dwc-icon.js';
 
@@ -10,23 +11,21 @@ import './dwc-icon.js';
  *
  * This is the only part of the report most people will read, so it gets the most
  * space, the plainest language and the strongest visual treatment. The culprit
- * determines the tone, the icon and the wording of the "who owns this" line —
- * never colour alone, which is why every state carries an icon and a word too.
+ * determines the icon and the wording of the "who owns this" line; the score
+ * determines how alarming it looks. Never colour alone, which is why every state
+ * carries an icon and a word too.
  *
  * Visually this is the one place the design is allowed to be expressive: an
  * ambient wash keyed to the verdict, display type, and a duotone icon whose rear
  * layer picks up the tone. Everything below it in the report stays quiet.
  */
-const PRESENTATION: Record<
-  Culprit,
-  { tone: 'ok' | 'warn' | 'bad' | 'unknown' | 'info'; icon: string; owner: string }
-> = {
-  healthy: { tone: 'ok', icon: 'verified', owner: 'Nothing needs fixing' },
-  server: { tone: 'bad', icon: 'server', owner: 'The website owner needs to fix this' },
-  'user-connection': { tone: 'warn', icon: 'wifi', owner: 'This one is on your side' },
-  'network-path': { tone: 'warn', icon: 'route', owner: 'Your internet provider’s routing' },
-  mixed: { tone: 'bad', icon: 'warning', owner: 'Two separate problems' },
-  unreachable: { tone: 'bad', icon: 'error', owner: 'The site could not be reached' },
+const PRESENTATION: Record<Culprit, { tone: ToneMode; icon: string; owner: string }> = {
+  healthy: { tone: 'score', icon: 'verified', owner: 'Nothing needs fixing' },
+  server: { tone: 'blamed', icon: 'server', owner: 'The website owner needs to fix this' },
+  'user-connection': { tone: 'blamed', icon: 'wifi', owner: 'This one is on your side' },
+  'network-path': { tone: 'blamed', icon: 'route', owner: 'Your internet provider’s routing' },
+  mixed: { tone: 'blamed', icon: 'warning', owner: 'Two separate problems' },
+  unreachable: { tone: 'blamed', icon: 'error', owner: 'The site could not be reached' },
   inconclusive: { tone: 'unknown', icon: 'question', owner: 'Not enough information' },
 };
 
@@ -183,9 +182,19 @@ export class DwcVerdictBanner extends LitElement {
   @property({ type: String, attribute: 'confidence-reason' })
   accessor confidenceReason: string | null = null;
 
+  /**
+   * The verdict score, purely so the banner and the dial agree.
+   *
+   * The dial is slotted in rather than owned here, so this component cannot read
+   * the number off it — and without the number it was colouring itself from the
+   * culprit alone, which is how a green 89 ended up inside a red banner.
+   */
+  @property({ type: Number })
+  accessor score: number | null = null;
+
   override render(): TemplateResult {
     const style = PRESENTATION[this.culprit];
-    const tone = style.tone;
+    const tone = verdictTone(this.score, style.tone);
 
     return html`
       <div

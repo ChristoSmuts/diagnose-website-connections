@@ -202,6 +202,15 @@ importers:
       '@axe-core/playwright':
         specifier: 'catalog:'
         version: 4.13.0(playwright-core@1.62.1)
+      '@dwc/contracts':
+        specifier: workspace:*
+        version: link:../packages/contracts
+      '@dwc/diagnostics':
+        specifier: workspace:*
+        version: link:../packages/diagnostics
+      '@dwc/persistence':
+        specifier: workspace:*
+        version: link:../packages/persistence
       '@playwright/test':
         specifier: 'catalog:'
         version: 1.62.1

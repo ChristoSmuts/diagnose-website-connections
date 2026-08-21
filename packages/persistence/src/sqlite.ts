@@ -335,6 +335,48 @@ class SqliteReportRepository implements ReportRepository {
     return row === undefined ? null : toReport(row);
   }
 
+  /**
+   * Writes the browser half of the run, once, and never over an existing one.
+   *
+   * The guard is the whole point: `complete()` refuses anything that is not still
+   * running so that history cannot be rewritten, and this has to be equally
+   * unable to rewrite. It writes only into the gap where client evidence is
+   * absent, so a second submission for the same report changes nothing and says
+   * so by returning null.
+   */
+  attachClientEvidence(
+    principalId: string,
+    id: string,
+    evidence: Evidence,
+    verdict: Verdict,
+  ): Report | null {
+    const row = this.db
+      .select()
+      .from(reports)
+      .where(and(eq(reports.principalId, principalId), eq(reports.id, id)))
+      .get();
+
+    if (row === undefined || row.status !== 'complete') return null;
+
+    // Already carries a browser measurement: this is a repeat, and a repeat is
+    // not allowed to change what the report says.
+    const stored = row.evidenceJson === null ? null : (JSON.parse(row.evidenceJson) as Evidence);
+    if (stored === null || stored.client != null) return null;
+
+    this.db
+      .update(reports)
+      .set({
+        culprit: verdict.culprit,
+        score: verdict.score,
+        verdictJson: JSON.stringify(verdict),
+        evidenceJson: JSON.stringify(evidence),
+      })
+      .where(and(eq(reports.principalId, principalId), eq(reports.id, id)))
+      .run();
+
+    return this.findById(principalId, id);
+  }
+
   fail(id: string, error: string): Report | null {
     this.assertStillRunning(id);
 

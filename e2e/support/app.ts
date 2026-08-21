@@ -85,24 +85,66 @@ export function checkRows(page: Page): Locator {
   return page.locator('dwc-check-row');
 }
 
+/**
+ * Opens a site's history, whether or not it is already open.
+ *
+ * The tree reveals whichever site is current, so after a run the site being
+ * tested is usually expanded already and its disclosure reads "Collapse …".
+ * Specs that clicked "Expand …" unconditionally then waited on a button that no
+ * longer existed. Clicking it anyway would have been worse than the timeout: it
+ * would have closed the very list the spec was about to count.
+ */
+export async function ensureSiteExpanded(page: Page, host: string): Promise<void> {
+  const nav = page.locator('dwc-nav-tree');
+  // Named for the host: the suite shares one database, so a bare /Expand /
+  // matches more than one row.
+  const expand = nav.getByRole('button', { name: new RegExp(`Expand ${host}`, 'i') });
+  if ((await expand.count()) > 0) await expand.first().click();
+
+  await expect(
+    nav.getByRole('button', { name: new RegExp(`Collapse ${host}`, 'i') }).first(),
+  ).toBeVisible();
+}
+
 export function sidebarSites(page: Page): Locator {
   return page.locator('dwc-nav-tree');
 }
 
 /**
- * Regions whose text changes every run and must be masked before a screenshot.
+ * The content column as a fixed rectangle, with the sidebar left out.
  *
- * Latency figures, timestamps and the score itself are all genuinely variable
- * against the live internet. Without masking, visual regression would fail on
- * every run for reasons that have nothing to do with the design — which is how a
- * visual suite gets disabled and stops protecting anything.
+ * Masking the tree was not enough, and the reason is worth recording: a mask
+ * hides an element's *content*, not its *size*. Every spec shares one database
+ * and `visual.spec` sorts last, so the sidebar it screenshots holds whatever the
+ * earlier specs left behind — while baselines are regenerated from a run of
+ * `visual.spec` alone, where the tree reads "No sites yet." One line of text
+ * against five site rows is a different height whether it is masked or not, and
+ * every comparison failed on it.
+ *
+ * Clipping to a rectangle fixes both halves of that: the sidebar is outside the
+ * image entirely, and the rectangle is the same size on every run regardless of
+ * what is in the page. The sidebar keeps its own coverage in `layout.spec` and
+ * `shell.spec`, which assert its geometry by measuring — which is the better
+ * instrument for it anyway.
  */
-export function volatileRegions(page: Page): Locator[] {
-  return [
-    page.locator('dwc-score-dial'),
-    page.locator('dwc-vantage-tile'),
-    page.locator('dwc-waterfall'),
-    page.locator('dwc-check-row .headline'),
-    page.locator('.meta'),
-  ];
+export async function contentClip(page: Page): Promise<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}> {
+  const box = await page.locator('main').boundingBox();
+  const viewport = page.viewportSize();
+  if (box === null || viewport === null) {
+    throw new Error('contentClip needs a rendered <main> and a fixed viewport');
+  }
+
+  // Full viewport height rather than the element's: the element grows with the
+  // report's findings, and that is the other thing no mask can absorb.
+  return {
+    x: Math.round(box.x),
+    y: 0,
+    width: Math.round(Math.min(box.width, viewport.width - box.x)),
+    height: viewport.height,
+  };
 }

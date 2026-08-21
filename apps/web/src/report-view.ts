@@ -253,6 +253,7 @@ export class DwcReportView extends LitElement {
           .headline=${verdict.headline}
           .plain=${verdict.plain}
           .confidence=${verdict.confidence}
+          .score=${verdict.score}
           confidence-reason=${verdict.confidenceReason ?? ''}
         >
           <dwc-score-dial

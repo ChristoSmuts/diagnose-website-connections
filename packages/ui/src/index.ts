@@ -28,3 +28,4 @@ export { DwcWaterfall, type WaterfallPhase } from './components/dwc-waterfall.js
 
 export { sharedStyles, tailwindSheet, baseSheet, surfaceSheet } from './styles/shared.js';
 export { formatWhen, formatBytes } from './utils/format.js';
+export { SCORE_BANDS, scoreTone, verdictTone } from './utils/score.js';

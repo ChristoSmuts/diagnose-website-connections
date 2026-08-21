@@ -237,6 +237,14 @@ produce a different verdict), and the SQLite `user_version` for migrations.
 Reports are **immutable and append-only**. A re-run is a new row, never an edit, and each stores its
 rendered `verdict_json` so an old report keeps saying what it said at the time.
 
+The one refinement to that: **a report may be _completed_ once, and only once.** The browser half of a
+run cannot start until the server half has answered, so its evidence necessarily arrives after the row
+is written. `attachClientEvidence` writes it into the gap where no client evidence exists and refuses
+anything else, which is what stops a narrow completion becoming a general-purpose rewrite of history.
+Leaving it unsaved was worse than it sounds: revisiting a report claimed the reader's connection had
+never been measured when it had, and the stored score, the JSON export and the sidebar dot all
+disagreed with what had been on screen.
+
 The most useful lesson from building this: **unit tests could not catch the class of bug that mattered
 most.** Every false accusation against a site owner or an ISP was found by running the real thing —
 first via the CLI, then in a browser. Fixes are then locked in with a regression test that explains

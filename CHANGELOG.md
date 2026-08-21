@@ -3,12 +3,59 @@
 Notable changes to the application. Package-level changes are tracked by Changesets in each
 package's own changelog. See [VERSIONING.md](VERSIONING.md) for what each version number means.
 
-## [0.6.0] — 2026-08-20
+## [0.6.0] — 2026-08-21
 
-Engine `1.5.0`. Fixes a measurement bug that was reporting healthy connections as slow, and stops the
-report giving equal billing to vantages it could not measure.
+Engine `1.5.0`. Fixes a measurement bug that was reporting healthy connections as slow, stops the
+report giving equal billing to vantages it could not measure, and makes Layer 1 agree with itself.
+
+### Added
+
+- **`scripts/update-visual-baselines.sh`** — regenerates the visual baselines locally in the same
+  Playwright container CI uses, so "Linux-only baselines" no longer means "GitHub-only baselines". The
+  source tree is copied into the container rather than mounted, so a Linux `pnpm install` never lands
+  on top of a Windows `node_modules`; only the PNGs come back out.
 
 ### Fixed
+
+- **The browser's half of a run is now saved.** Only the server can be probed while you wait; the
+  browser cannot start measuring until there is a target to measure against, so its evidence arrives
+  seconds after the report row is written. It was computed, returned for display and then thrown away
+  — so clicking to another report and back showed "your connection: not measured" about a run that had
+  measured it perfectly well, and the stored score, the export and the sidebar's culprit dot all
+  disagreed with what had been on screen. `attachClientEvidence` writes it once, into the gap where no
+  client evidence exists, so a report can be **completed** but still never rewritten. A re-run remains
+  a new row.
+- **The sidebar highlight follows the report.** `selectedSiteId` moved only when a site row was
+  clicked, so running a new check — or opening one from history, or from a pasted URL — left the
+  previously chosen site marked as the active one. The tree also reveals whichever site is current,
+  because a highlighted row with nothing under it explains nothing.
+- **The verdict banner can be amber.** Its tone came from the culprit alone and the dial's came from
+  the score, so a site scoring 89 and one scoring 61 were both flatly red — and the 89 sat inside a red
+  banner next to a green dial the same component had drawn. Both now read the same bands from
+  `utils/score.ts`. A verdict that names a culprit never renders green however well it scored, and
+  "inconclusive" stays neutral grey rather than borrowing a severity from a number it does not stand
+  behind.
+- **The selected site row failed contrast on its report count.** The subtle text token is tuned against
+  the sidebar surface, not against the brand wash a selected row paints under it — 4.31:1 in light and
+  4.48:1 in dark, both just under WCAG AA. Latent until the tree started following the current report,
+  because a row had previously only ever been selected by clicking one and the accessibility specs
+  never clicked.
+- **The report snapshots no longer depend on how the target felt that morning.** They were captured
+  with `fullPage` from a live diagnostic, which made them hostage to two things no mask can absorb: a
+  findings list that changes the image's height, and a verdict that flips outright when the target's
+  response time drifts a few tens of milliseconds — taking the headline and the banner's entire
+  background colour with it. The visual specs now photograph a report seeded into the database from
+  the same fixtures the unit tests use, clipped to a fixed rectangle. No production code changed for
+  it: there is no test-only route, and the view renders from `verdict_json` exactly as it always does.
+  Nothing is masked any more either, which is the point of the exercise — while these ran against a
+  live target, the score, the vantage tiles, the waterfall, every check headline and the verdict
+  paragraph all had to be hidden, leaving a comparison of the page's furniture. The whole content
+  column is now under comparison.
+- **Visual baselines could never match.** Every spec shares one database and `visual.spec` sorts last,
+  so by the time it screenshots, other specs have created and deleted sites — while the job that
+  regenerates baselines runs `visual.spec` alone against a fresh one. With `fullPage: true` and no mask
+  over the tree, each baseline captured a list of site names that a full run could not reproduce. The
+  sidebar tree is now masked; its chrome stays visible, so a stylesheet that failed to load still shows.
 
 - **`CONTROL_URL` no longer loses its path, which was making fast connections look slow.** The value
   was reduced to a bare origin at boot, reasoning that the browser appends `/api/ping`. That is only
@@ -42,6 +89,16 @@ report giving equal billing to vantages it could not measure.
   compile: prebuilds ship for every platform this project targets and were already the binary in use.
 
 ### Changed
+
+- **The speed test is not offered on a local install.** The transfer runs against the page's own
+  origin, never the control endpoint, so on a self-hosted local instance it never leaves the machine:
+  the switch would spend nothing, prove nothing, and the check beside it reported "not measurable".
+  The check now says that before mentioning consent, rather than claiming the test was skipped to spare
+  data it would never have used.
+- **Selecting a site opens its most recent run.** The tree was a set of disclosures rather than
+  navigation — a click highlighted a row, loaded a history list and left whatever report was on screen
+  exactly where it was. Collapsed to the rail there was no history list to read, so the click did
+  nothing visible at all.
 
 - **Vantages that could not be measured no longer take a card.** "Your connection" and "the path
   between" were rendering as full tiles whose only content was an explanation of their own absence,

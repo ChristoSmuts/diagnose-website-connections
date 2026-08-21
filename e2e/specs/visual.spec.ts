@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
-import { openApp, runDiagnostic, setTheme, volatileRegions } from '../support/app.js';
+import { contentClip, openApp, setTheme, verdictHeadline } from '../support/app.js';
+import { readVisualFixture } from '../support/visual-fixture.js';
 
 /**
  * Three snapshots, and deliberately only three.
@@ -25,8 +26,9 @@ import { openApp, runDiagnostic, setTheme, volatileRegions } from '../support/ap
  * Two constraints remain:
  *
  *  1. **Linux-only baselines.** Font rasterisation differs by platform, so
- *     baselines taken on Windows or macOS can never match CI. See
- *     `.github/workflows/ci.yml` for the job that regenerates them.
+ *     baselines taken on Windows or macOS can never match CI. Regenerate them
+ *     with `./scripts/update-visual-baselines.sh`, which runs the official
+ *     Playwright container locally, or with the update-snapshots CI job.
  *  2. **Volatile regions are masked.** Latency figures, timestamps and the health
  *     score change every run against the live internet, and comparing them would
  *     fail for reasons that have nothing to do with the design.
@@ -34,7 +36,7 @@ import { openApp, runDiagnostic, setTheme, volatileRegions } from '../support/ap
 test.describe('visual regression', () => {
   test.skip(
     process.platform !== 'linux',
-    'Snapshot baselines are Linux-only — regenerate them with the update-snapshots CI job.',
+    'Snapshot baselines are Linux-only — run ./scripts/update-visual-baselines.sh, or the update-snapshots CI job.',
   );
 
   test.skip(
@@ -42,26 +44,68 @@ test.describe('visual regression', () => {
     'One viewport is enough to catch a page that failed to render; layout has its own specs.',
   );
 
+  /**
+   * Reduced motion, so nothing is mid-flight when the shutter opens.
+   *
+   * The score dial counts up in JavaScript, which `animations: 'disabled'` does
+   * not reach — that option settles CSS animations and transitions, not a
+   * requestAnimationFrame loop. Under this preference the dial renders its final
+   * value immediately, which the spec below asserts independently. Every duration
+   * token collapses to 1 ms too, so transitions are finished rather than merely
+   * frozen part-way.
+   *
+   * This is what makes the shots below need no masks at all.
+   *
+   * Emulated per page rather than through `test.use`, so the preference is in
+   * place before the dial ever reads `matchMedia` — the same reason the spec at
+   * the bottom of this file does it this way.
+   */
+  test.beforeEach(async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+  });
+
+  /**
+   * The empty state, clipped to the content column.
+   *
+   * Nothing here comes off the network — no diagnostic has run — so the only
+   * thing that ever varied was the sidebar, and the clip removes it.
+   */
   test('the empty state looks right', async ({ page }) => {
     await openApp(page);
     await setTheme(page, 'light');
-    await expect(page).toHaveScreenshot('empty-light.png', { fullPage: true });
+
+    await expect(page).toHaveScreenshot('empty-light.png', { clip: await contentClip(page) });
   });
 
   /**
    * Both themes for the report, because a theme that stops applying is exactly
    * the failure this is here for and it shows up in the palette rather than the
    * structure.
+   *
+   * A *seeded* report, not a fresh diagnostic. Photographing a live one meant
+   * photographing whatever the target was doing that minute: a few tens of
+   * milliseconds either way flips the verdict, and with it the headline, the
+   * findings and the banner's entire background colour. See `global-setup.ts`.
+   *
+   * Nothing is masked, and that is the payoff. While these ran against a live
+   * target, almost everything worth looking at had to be hidden — the score, the
+   * vantage tiles, the waterfall, every check headline and the verdict paragraph
+   * — which left a comparison of the page's furniture and little else. A stored
+   * verdict renders identically every time, so the whole content column is under
+   * comparison: the score really is that number, the tiles really are in that
+   * arrangement, and a token that changes colour is caught rather than covered up.
+   *
+   * The one genuinely time-dependent thing on the page, the "Checked <date>"
+   * footer, sits far below the clip.
    */
   for (const theme of ['light', 'dark'] as const) {
     test(`the full report looks right (${theme})`, async ({ page }) => {
-      await openApp(page);
+      await page.goto(`/report/${readVisualFixture()}`);
       await setTheme(page, theme);
-      await runDiagnostic(page);
+      await expect(verdictHeadline(page)).not.toBeEmpty();
 
       await expect(page).toHaveScreenshot(`report-${theme}.png`, {
-        fullPage: true,
-        mask: volatileRegions(page),
+        clip: await contentClip(page),
       });
     });
   }
@@ -80,8 +124,10 @@ test.describe('reduced motion', () => {
      */
     await page.emulateMedia({ reducedMotion: 'reduce' });
 
-    await openApp(page);
-    await runDiagnostic(page);
+    // The seeded report again: this asserts the dial's behaviour, not the
+    // engine's, and a stored verdict renders it through the same path without
+    // spending ten seconds on a live probe.
+    await page.goto(`/report/${readVisualFixture()}`);
 
     const meter = page.locator('dwc-score-dial [role="meter"]');
     const announced = Number(await meter.getAttribute('aria-valuenow'));

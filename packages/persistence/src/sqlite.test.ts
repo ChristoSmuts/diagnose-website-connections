@@ -1,3 +1,4 @@
+import type { Evidence } from '@dwc/contracts';
 import { analyse } from '@dwc/diagnostics';
 import { scenarios } from '@dwc/diagnostics/testing';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -159,6 +160,77 @@ describe('report immutability', () => {
       ImmutableReportError,
     );
     expect(() => repos.reports.fail(report.id, 'nope')).toThrow(ImmutableReportError);
+  });
+
+  /**
+   * The browser half of a run arrives after the row is written, and has to stick.
+   *
+   * Only the server can be probed while the reader waits; the browser cannot start
+   * measuring until there is a target to measure against. That evidence used to be
+   * computed, returned for display and thrown away, so revisiting a report showed
+   * "your connection: not measured" about a run that had measured it — and the
+   * export, the sidebar dot and the stored score all disagreed with the screen.
+   */
+  it('attaches browser evidence to a finished report', () => {
+    const site = newSite();
+    const report = repos.reports.create({ principalId: ALICE, siteId: site.id });
+
+    // A server-only run: no browser evidence, so the client vantage is unknown.
+    const serverOnly: Evidence = { ...scenarios.healthy(), client: null };
+    repos.reports.complete(report.id, serverOnly, analyse(serverOnly));
+    expect(repos.reports.findById(ALICE, report.id)?.verdict?.vantages.userConnection.status).toBe(
+      'unknown',
+    );
+
+    const merged = scenarios.healthy();
+    const attached = repos.reports.attachClientEvidence(ALICE, report.id, merged, analyse(merged));
+
+    expect(attached?.evidence?.client).not.toBeNull();
+    const reopened = repos.reports.findById(ALICE, report.id);
+    expect(reopened?.verdict?.vantages.userConnection.status).not.toBe('unknown');
+    expect(reopened?.evidence?.client).not.toBeNull();
+  });
+
+  /**
+   * The guard that keeps immutability intact: a report can be completed once, not
+   * revised. Without it this method would be a general-purpose rewrite of history
+   * wearing a narrow name.
+   */
+  it('refuses a second attachment, leaving the first standing', () => {
+    const site = newSite();
+    const report = repos.reports.create({ principalId: ALICE, siteId: site.id });
+    const serverOnly: Evidence = { ...scenarios.healthy(), client: null };
+    repos.reports.complete(report.id, serverOnly, analyse(serverOnly));
+
+    const first = scenarios.healthy();
+    repos.reports.attachClientEvidence(ALICE, report.id, first, analyse(first));
+    const afterFirst = repos.reports.findById(ALICE, report.id)?.verdict?.culprit;
+
+    const second = scenarios.slowClient();
+    expect(
+      repos.reports.attachClientEvidence(ALICE, report.id, second, analyse(second)),
+    ).toBeNull();
+
+    expect(repos.reports.findById(ALICE, report.id)?.verdict?.culprit).toBe(afterFirst);
+  });
+
+  it('refuses to attach across principals, or to a report that never completed', () => {
+    const site = newSite();
+    const report = repos.reports.create({ principalId: ALICE, siteId: site.id });
+    const evidence = scenarios.healthy();
+
+    // Still running: there is nothing to attach to yet.
+    expect(
+      repos.reports.attachClientEvidence(ALICE, report.id, evidence, analyse(evidence)),
+    ).toBeNull();
+
+    const serverOnly: Evidence = { ...evidence, client: null };
+    repos.reports.complete(report.id, serverOnly, analyse(serverOnly));
+
+    expect(
+      repos.reports.attachClientEvidence(BOB, report.id, evidence, analyse(evidence)),
+    ).toBeNull();
+    expect(repos.reports.findById(ALICE, report.id)?.evidence?.client).toBeNull();
   });
 
   it('treats a re-run as a new row, preserving the earlier result', () => {

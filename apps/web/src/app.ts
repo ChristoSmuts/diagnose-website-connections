@@ -5,7 +5,7 @@ import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
 import '@dwc/ui';
 import './report-view.js';
 import { ApiError, api, streamDiagnostic } from './api-client.js';
-import { runClientProbe } from './client-probe.js';
+import { appIsLocal, runClientProbe } from './client-probe.js';
 
 /** The probe phases, in order, with plain names for the progress list. */
 const PHASES: { key: ProbePhase; label: string }[] = [
@@ -611,6 +611,12 @@ export class DwcApp extends LitElement {
   private steps: ProgressStep[] = [];
   private error: string | null = null;
   private throughputConsent = false;
+
+  /*
+   * Fixed for the life of the page: it is a property of where the app is served
+   * from, which cannot change without a navigation. Not reactive state.
+   */
+  private readonly appIsLocal = appIsLocal();
   private showArchived = false;
   private pendingDelete: {
     kind: 'site' | 'report';
@@ -788,10 +794,41 @@ export class DwcApp extends LitElement {
     }
   }
 
+  /**
+   * Selecting a site opens its most recent run.
+   *
+   * Without this the tree was a set of disclosures rather than navigation: a click
+   * highlighted a row, loaded a history list and left whatever report happened to
+   * be on screen exactly where it was. Collapsed to the rail there is no history
+   * list to read at all, so the click did nothing visible whatsoever.
+   *
+   * `latestReport` already travels with each site for the health dot, so this
+   * needs no extra round trip to know where to go.
+   */
+  private async selectSite(siteId: string): Promise<void> {
+    this.selectedSiteId = siteId;
+
+    const latest = this.sites.find((site) => site.id === siteId)?.latestReport ?? null;
+    // A site with no finished run yet keeps the old behaviour: reveal its history
+    // and leave the reader where they are, rather than blanking the page.
+    if (latest !== null) await this.openReport(latest.id);
+
+    await this.loadReports(siteId);
+  }
+
   private async openReport(reportId: string, options = { push: true }): Promise<void> {
     try {
       this.liveVerdict = null;
       this.report = await api.getReport(reportId);
+      /*
+       * The tree follows the report, not the other way round.
+       *
+       * `selectedSiteId` used to move only when a site row was clicked, so opening
+       * a report — from a run, a history entry or a pasted URL — left the previous
+       * site highlighted as the active one. The highlight is meant to say "this is
+       * what you are looking at", and it was saying something else.
+       */
+      this.selectedSiteId = this.report.siteId;
       this.sidebarOpen = false;
       if (options.push) this.pushReportUrl(reportId);
     } catch (error) {
@@ -839,6 +876,7 @@ export class DwcApp extends LitElement {
           this.setStep(event.phase, event.status, event.message);
         } else if (event.type === 'complete') {
           this.report = event.report;
+          this.selectedSiteId = event.report.siteId;
           this.pushReportUrl(event.report.id);
         } else if (event.type === 'failed') {
           this.error = event.error;
@@ -870,7 +908,7 @@ export class DwcApp extends LitElement {
         targetUrl: target,
         controlUrl: this.controlUrl,
         referenceUrls: this.referenceUrls,
-        throughputConsent: this.throughputConsent,
+        throughputConsent: this.throughputConsent && !this.appIsLocal,
         onProgress: (message) => this.setStep('client', 'started', message),
       });
 
@@ -1201,10 +1239,7 @@ export class DwcApp extends LitElement {
           selected-site=${this.selectedSiteId ?? ''}
           selected-report=${this.report?.id ?? ''}
           @site-expand=${(e: CustomEvent<{ siteId: string }>) => void this.loadReports(e.detail.siteId)}
-          @site-select=${(e: CustomEvent<{ siteId: string }>) => {
-            this.selectedSiteId = e.detail.siteId;
-            void this.loadReports(e.detail.siteId);
-          }}
+          @site-select=${(e: CustomEvent<{ siteId: string }>) => void this.selectSite(e.detail.siteId)}
           @site-rerun=${(e: CustomEvent<{ siteId: string; url: string }>) =>
             void this.diagnose(e.detail.url, e.detail.siteId)}
           @site-rename=${(e: CustomEvent<{ siteId: string; label: string }>) =>
@@ -1341,35 +1376,49 @@ export class DwcApp extends LitElement {
         )}
       </div>
 
-      <!-- Clicking anywhere on the row toggles it, but a click that already went
-           through the switch must not be counted twice. -->
-      <div
-        class="option"
-        data-on=${this.throughputConsent ? 'true' : 'false'}
-        @click=${(e: MouseEvent) => {
-          const hitSwitch = e
-            .composedPath()
-            .some((n) => (n as HTMLElement).localName === 'dwc-switch');
-          if (!hitSwitch) this.throughputConsent = !this.throughputConsent;
-        }}
-      >
-        <span class="option-glyph"><dwc-icon name="gauge"></dwc-icon></span>
-        <span class="option-text">
-          <p class="option-title">Measure my connection speed too</p>
-          <p class="option-note">
-            Downloads about 4&nbsp;MB and uploads 1&nbsp;MB. Skip it on mobile data.
-          </p>
-        </span>
-        <dwc-switch
-          aria-label="Measure my connection speed too"
-          .checked=${this.throughputConsent}
-          ?disabled=${this.running}
-          @change=${(e: CustomEvent<{ checked: boolean }>) => {
-            this.throughputConsent = e.detail.checked;
-          }}
-        ></dwc-switch>
-      </div>
-
+      ${
+        /*
+         * Hidden on a local install rather than shown and ignored.
+         *
+         * The transfer runs against this page's own origin, so on a local install
+         * it never leaves the machine: the switch would spend nothing, prove
+         * nothing, and the check beside it would report "not measurable" — an
+         * option that can only disappoint. The deployments where it means
+         * something are exactly the ones where the app is reached over a network.
+         */
+        this.appIsLocal
+          ? nothing
+          : html`
+              <!-- Clicking anywhere on the row toggles it, but a click that already
+                   went through the switch must not be counted twice. -->
+              <div
+                class="option"
+                data-on=${this.throughputConsent ? 'true' : 'false'}
+                @click=${(e: MouseEvent) => {
+                  const hitSwitch = e
+                    .composedPath()
+                    .some((n) => (n as HTMLElement).localName === 'dwc-switch');
+                  if (!hitSwitch) this.throughputConsent = !this.throughputConsent;
+                }}
+              >
+                <span class="option-glyph"><dwc-icon name="gauge"></dwc-icon></span>
+                <span class="option-text">
+                  <p class="option-title">Measure my connection speed too</p>
+                  <p class="option-note">
+                    Downloads about 4&nbsp;MB and uploads 1&nbsp;MB. Skip it on mobile data.
+                  </p>
+                </span>
+                <dwc-switch
+                  aria-label="Measure my connection speed too"
+                  .checked=${this.throughputConsent}
+                  ?disabled=${this.running}
+                  @change=${(e: CustomEvent<{ checked: boolean }>) => {
+                    this.throughputConsent = e.detail.checked;
+                  }}
+                ></dwc-switch>
+              </div>
+            `
+      }
       ${
         this.running
           ? html`

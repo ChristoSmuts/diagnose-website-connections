@@ -15,6 +15,16 @@ const repoRoot = resolve(fileURLToPath(new URL('.', import.meta.url)), '..');
  */
 const databasePath = join(mkdtempSync(join(tmpdir(), 'dwc-e2e-')), 'e2e.db');
 
+/*
+ * Handed to global setup, which seeds the report the visual specs photograph.
+ *
+ * An environment variable rather than an import, because the config is what owns
+ * this path and `global-setup.ts` runs in the same process a moment later. A
+ * shared module would have to recompute `mkdtempSync` and would seed a different
+ * database than the one the server opens.
+ */
+process.env.DWC_E2E_DB = databasePath;
+
 const PORT = 8799;
 const baseURL = `http://127.0.0.1:${String(PORT)}`;
 
@@ -54,6 +64,8 @@ export default defineConfig({
       caret: 'hide',
     },
   },
+
+  globalSetup: './global-setup.ts',
 
   fullyParallel: false,
   // A shared SQLite database and a shared sidebar make parallel writes to the

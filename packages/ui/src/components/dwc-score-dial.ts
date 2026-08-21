@@ -1,6 +1,7 @@
 import { LitElement, css, html, svg, type PropertyValues, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { sharedStyles } from '../styles/shared.js';
+import { scoreTone } from '../utils/score.js';
 
 /**
  * Circular 0–100 health score.
@@ -184,9 +185,9 @@ export class DwcScoreDial extends LitElement {
 
   /** Thresholds match the engine's own bands so the colour never contradicts the verdict. */
   private get toneVar(): string {
-    if (this.clamped >= 80) return 'var(--dwc-ok)';
-    if (this.clamped >= 50) return 'var(--dwc-warn)';
-    return 'var(--dwc-bad)';
+    // Shared with the verdict banner, which renders the same number as a colour
+    // wash — see utils/score.ts for why those two must not drift apart.
+    return `var(--dwc-${scoreTone(this.clamped)})`;
   }
 
   private renderDelta(): TemplateResult | null {

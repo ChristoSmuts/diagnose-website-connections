@@ -7,6 +7,10 @@ on:
   # Regenerating visual baselines is a manual act. They must be produced in the
   # same container CI compares against — font rasterisation differs by platform,
   # so a baseline taken on a developer machine can never match.
+  #
+  # This job is the option for anyone without Docker. With it,
+  # ./scripts/update-visual-baselines.sh does the same work locally in the same
+  # image, and skips the artifact round trip.
   workflow_dispatch:
     inputs:
       update_snapshots:

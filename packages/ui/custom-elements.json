@@ -214,6 +214,30 @@
             "name": "formatBytes",
             "module": "./utils/format.js"
           }
+        },
+        {
+          "kind": "js",
+          "name": "SCORE_BANDS",
+          "declaration": {
+            "name": "SCORE_BANDS",
+            "module": "./utils/score.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "scoreTone",
+          "declaration": {
+            "name": "scoreTone",
+            "module": "./utils/score.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "verdictTone",
+          "declaration": {
+            "name": "verdictTone",
+            "module": "./utils/score.js"
+          }
         }
       ]
     },
@@ -2072,6 +2096,16 @@
               },
               "default": "null",
               "attribute": "confidence-reason"
+            },
+            {
+              "kind": "field",
+              "name": "score",
+              "type": {
+                "text": "number | null"
+              },
+              "default": "null",
+              "description": "The verdict score, purely so the banner and the dial agree.\n\nThe dial is slotted in rather than owned here, so this component cannot read\nthe number off it — and without the number it was colouring itself from the\nculprit alone, which is how a green 89 ended up inside a red banner.",
+              "attribute": "score"
             }
           ],
           "attributes": [
@@ -2114,6 +2148,15 @@
               },
               "default": "null",
               "fieldName": "confidenceReason"
+            },
+            {
+              "name": "score",
+              "type": {
+                "text": "number | null"
+              },
+              "default": "null",
+              "description": "The verdict score, purely so the banner and the dial agree.\n\nThe dial is slotted in rather than owned here, so this component cannot read\nthe number off it — and without the number it was colouring itself from the\nculprit alone, which is how a green 89 ended up inside a red banner.",
+              "fieldName": "score"
             }
           ],
           "superclass": {
@@ -2474,6 +2517,89 @@
           "declaration": {
             "name": "formatBytes",
             "module": "src/utils/format.ts"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "javascript-module",
+      "path": "src/utils/score.ts",
+      "declarations": [
+        {
+          "kind": "variable",
+          "name": "SCORE_BANDS",
+          "type": {
+            "text": "{\n  /** At or above this, nothing is materially wrong. */\n  ok: 80,\n  /** At or above this, there is a problem worth attention but not alarm. */\n  warn: 50,\n}"
+          },
+          "default": "{ /** At or above this, nothing is materially wrong. */ ok: 80, /** At or above this, there is a problem worth attention but not alarm. */ warn: 50, }",
+          "description": "The score bands, in one place, because two components render the same number.\n\nThe dial had these thresholds inline and the verdict banner took its colour\nfrom the culprit instead, so a site scoring 89 rendered a green dial inside a\nred banner. Layer 1 is meant to be read as one object; two halves of it\ndisagreeing about how bad the news is undermines both."
+        },
+        {
+          "kind": "function",
+          "name": "scoreTone",
+          "return": {
+            "type": {
+              "text": "StatusTone"
+            }
+          },
+          "parameters": [
+            {
+              "name": "score",
+              "type": {
+                "text": "number | null"
+              }
+            }
+          ],
+          "description": "Which tone a 0-100 score belongs to. Null (not scored) is never \"ok\"."
+        },
+        {
+          "kind": "function",
+          "name": "verdictTone",
+          "return": {
+            "type": {
+              "text": "StatusTone"
+            }
+          },
+          "parameters": [
+            {
+              "name": "score",
+              "type": {
+                "text": "number | null"
+              }
+            },
+            {
+              "name": "mode",
+              "type": {
+                "text": "ToneMode"
+              }
+            }
+          ],
+          "description": "The tone for a verdict, given how bad it is and what kind of verdict it is.\n\nThe severity comes from the score, so amber is reachable rather than the banner\nbeing red or green and nothing else. But a verdict that names a culprit never\nrenders green however high it scored: \"the website owner needs to fix this\" set\nagainst a healthy green wash is a contradiction, and a reader resolves those by\ntrusting the colour and skipping the words."
+        }
+      ],
+      "exports": [
+        {
+          "kind": "js",
+          "name": "SCORE_BANDS",
+          "declaration": {
+            "name": "SCORE_BANDS",
+            "module": "src/utils/score.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "scoreTone",
+          "declaration": {
+            "name": "scoreTone",
+            "module": "src/utils/score.ts"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "verdictTone",
+          "declaration": {
+            "name": "verdictTone",
+            "module": "src/utils/score.ts"
           }
         }
       ]

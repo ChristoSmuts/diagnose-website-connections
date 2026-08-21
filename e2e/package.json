@@ -16,6 +16,9 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "catalog:",
+    "@dwc/contracts": "workspace:*",
+    "@dwc/diagnostics": "workspace:*",
+    "@dwc/persistence": "workspace:*",
     "@playwright/test": "catalog:",
     "@types/node": "catalog:",
     "axe-core": "catalog:",

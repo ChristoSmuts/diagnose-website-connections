@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  ensureSiteExpanded,
   openApp,
   openSidebar,
   runDiagnostic,
@@ -112,7 +113,7 @@ test.describe('clearing out old runs', () => {
 
     // Starting a run closes the drawer on purpose, so it has to be reopened.
     await openSidebar(page);
-    await nav.getByRole('button', { name: new RegExp(`Expand ${TARGET}`, 'i') }).click();
+    await ensureSiteExpanded(page, TARGET);
 
     await expect.poll(async () => await nav.locator('.report-row').count()).toBeGreaterThan(1);
     const before = await nav.locator('.report-row').count();
@@ -137,11 +138,7 @@ test.describe('clearing out old runs', () => {
 
     await openSidebar(page);
     const nav = page.locator('dwc-nav-tree');
-    const expand = new RegExp(`Expand ${TARGET}`, 'i');
-
-    // Named for the host: other specs share this database and leave their own
-    // sites behind, so a bare /Expand / matches more than one row.
-    await nav.getByRole('button', { name: expand }).click();
+    await ensureSiteExpanded(page, TARGET);
     await expect.poll(async () => await nav.locator('.report-row').count()).toBeGreaterThan(0);
 
     // Relative to what is there, not to zero: the suite shares one database, so
@@ -162,10 +159,10 @@ test.describe('clearing out old runs', () => {
     await openSidebar(page);
     await page.getByRole('button', { name: /view archived/i }).click();
 
-    // Switching lists collapses the tree, so every row reads "Expand" here. That
-    // reset is deliberate: expansion used to survive the switch and show an empty
-    // history, because the cache is cleared and nothing re-requested it.
-    await nav.getByRole('button', { name: expand }).click();
+    // Switching lists collapses the tree — that reset is deliberate: expansion used
+    // to survive the switch and show an empty history, because the cache is cleared
+    // and nothing re-requested it.
+    await ensureSiteExpanded(page, TARGET);
 
     await expect
       .poll(async () => await nav.getByRole('button', { name: /Restore the check from/i }).count())
@@ -178,7 +175,7 @@ test.describe('clearing out old runs', () => {
     // Switching lists collapses the tree on purpose, so expand again to look.
     await openSidebar(page);
     await page.getByRole('button', { name: /back to your sites/i }).click();
-    await nav.getByRole('button', { name: expand }).click();
+    await ensureSiteExpanded(page, TARGET);
     await expect.poll(async () => await nav.locator('.report-row').count()).toBeGreaterThan(0);
   });
 });

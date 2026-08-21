@@ -1733,25 +1733,31 @@ ${
        * install it crosses no network at all — and reported around 11 MB/s as
        * though it were the reader's line. Their round trip has been guarded since
        * Phase 1; their bandwidth was measured the same way and never was.
+       *
+       * Judged before consent, because the two answer different questions and only
+       * one of them is true here. "Not run: it uses your data" is wrong on a local
+       * install — the app does not offer the option there at all, precisely because
+       * the transfer would never leave the machine. Saying it was skipped to spare
+       * bandwidth sends someone looking for a switch that is deliberately absent.
        */
-      status:
-        tp === null || !tp.consented
+      status: loopbackTransfer
+        ? 'unavailable'
+        : tp === null || !tp.consented
           ? 'skipped'
-          : loopbackTransfer || tp.downloadBps.value === null
+          : tp.downloadBps.value === null
             ? 'unavailable'
             : 'pass',
       headline:
         loopbackTransfer || tp?.downloadBps.value === undefined || tp.downloadBps.value === null
           ? null
           : `${(tp.downloadBps.value / 125_000).toFixed(1)} Mbps`,
-      summary:
-        tp === null || !tp.consented
+      summary: loopbackTransfer
+        ? 'Not measurable — this tool is running on your own machine, so a transfer would never leave it.'
+        : tp === null || !tp.consented
           ? 'Not run: the speed test is off by default because it uses your data.'
-          : loopbackTransfer
-            ? 'Not measurable — this tool is running on your own machine, so the transfer never left it.'
-            : tp.downloadBps.value === null
-              ? 'The speed test did not complete.'
-              : `Measured about ${(tp.downloadBps.value / 125_000).toFixed(1)} Mbps down.`,
+          : tp.downloadBps.value === null
+            ? 'The speed test did not complete.'
+            : `Measured about ${(tp.downloadBps.value / 125_000).toFixed(1)} Mbps down.`,
       technical:
         tp === null || !tp.consented
           ? 'Throughput measurement is opt-in. It transfers several megabytes, which costs real money on a metered connection, so it is never run without being asked for — and it is the least important of the client measurements, since latency and loss explain far more slow-page complaints than bandwidth does.'

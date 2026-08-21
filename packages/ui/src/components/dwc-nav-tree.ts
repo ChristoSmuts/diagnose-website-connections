@@ -201,6 +201,22 @@ export class DwcNavTree extends LitElement {
         font-variant-numeric: tabular-nums;
       }
 
+      /*
+       * The report count needs more weight once its row is selected.
+       *
+       * The subtle text token is tuned against the sidebar's own surface, not against
+       * the brand wash a selected row paints underneath it: that pairing measures
+       * 4.31:1 in light and 4.48:1 in dark, both just under the 4.5:1 that WCAG AA
+       * asks for. Muted clears it comfortably in both — 5.6:1 and 7.0:1.
+       *
+       * Latent until the tree began following the current report, because before
+       * that a row was only ever selected by clicking one, and the accessibility
+       * specs never clicked.
+       */
+      .site-row[data-selected='true'] .count {
+        color: var(--dwc-text-muted);
+      }
+
       .reports {
         margin: 0 0 var(--dwc-space-1) var(--dwc-space-5);
         padding-left: var(--dwc-space-3);
@@ -363,6 +379,28 @@ export class DwcNavTree extends LitElement {
 
   protected override willUpdate(changed: Map<string, unknown>): void {
     if (changed.has('view') && changed.get('view') !== undefined) this.expanded = new Set();
+  }
+
+  /**
+   * Reveal whichever site is current.
+   *
+   * The selection highlight is on the site row, but the report that is actually
+   * open is a child of it — so a collapsed site marked "selected" showed the
+   * reader a highlight with nothing under it to explain what they were looking at.
+   *
+   * Only on change, never on every render: re-expanding on each update would fight
+   * a reader who deliberately collapsed the site they are reading. `site-expand`
+   * is emitted alongside, because the host loads a site's history lazily and would
+   * otherwise open an empty branch.
+   */
+  protected override updated(changed: Map<string, unknown>): void {
+    if (!changed.has('selectedSite')) return;
+
+    const site = this.selectedSite;
+    if (site === null || site === '' || this.expanded.has(site)) return;
+
+    this.expanded = new Set(this.expanded).add(site);
+    this.emit('site-expand', { siteId: site });
   }
 
   private toggle(siteId: string): void {

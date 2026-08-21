@@ -198,6 +198,19 @@ function resolveAgainst(controlUrl: string | null, path: string): string {
 }
 
 /**
+ * Whether this page is being served from the reader's own machine or LAN.
+ *
+ * Exported because the UI needs the same answer *before* a run, not just after.
+ * The throughput test always transfers against this origin — never the control
+ * endpoint — so on a local install it measures loopback however remote
+ * `CONTROL_URL` points, and offering it is offering something the deployment
+ * cannot deliver.
+ */
+export function appIsLocal(): boolean {
+  return isLocalHost(null);
+}
+
+/**
  * Whether a URL names this machine or this local network.
  *
  * Null means same-origin, so the page's own hostname is the one to judge — which
