@@ -19,6 +19,7 @@ export { DwcIcon, type IconName, type IconWeight } from './components/dwc-icon.j
 export { DwcNavTree } from './components/dwc-nav-tree.js';
 export { DwcProgressSteps, type ProgressStep } from './components/dwc-progress-steps.js';
 export { DwcScoreDial } from './components/dwc-score-dial.js';
+export { DwcSwitch } from './components/dwc-switch.js';
 export { DwcThemeToggle } from './components/dwc-theme-toggle.js';
 export { DwcUrlInput } from './components/dwc-url-input.js';
 export { DwcVantageTile } from './components/dwc-vantage-tile.js';

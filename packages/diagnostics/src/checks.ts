@@ -14,12 +14,13 @@ import type {
   TlsEvidence,
 } from '@dwc/contracts';
 import { countryLabel } from './countries.js';
-import { formatBytes, ms, plural } from './findings/helpers.js';
+import { formatBytes, hostOf, ms, plural } from './findings/helpers.js';
 import { describeLocation, distanceCeilingKm, KM_PER_MS, MAX_TERRESTRIAL_KM } from './location.js';
 import type { HostingLocation } from './location.js';
 import { instabilityRatio, lossRatio } from './stats.js';
 import {
   CERT_EXPIRY,
+  clientRttBand,
   LOCAL_CONTROL_RTT_MS,
   MIN_SAMPLES_FOR_VARIANCE,
   controlIsLoopback,
@@ -1605,23 +1606,42 @@ function clientChecks(client: ClientEvidence | null, link: Link): Check[] {
    */
   const loopbackTransfer = client.appIsLocal === true;
 
+  /*
+   * Which instrument produced `rtt`, and therefore which band judges it.
+   *
+   * An unpaired control is timed opaquely — a whole response rather than a known-
+   * empty body — and holding it to the ping band is what produced "your connection
+   * is slow" for a link that pings in 11 ms. See `clientRttBand`.
+   */
+  const opaqueControl = client.controlIsPaired === false;
+  const rttBand = clientRttBand(client);
+  const controlHost = client.controlOrigin === null ? null : hostOf(client.controlOrigin);
+
   checks.push(
     check({
       id: 'client.latency',
       phase: 'client',
       title: 'Your connection latency',
-      status: loopback ? 'unavailable' : bandStatus(classify(rtt, THRESHOLDS.clientRttMs)),
+      status: loopback ? 'unavailable' : bandStatus(classify(rtt, rttBand)),
       headline: loopback || rtt === null ? null : ms(rtt),
       summary: loopback
         ? 'Not measurable: this tool is running on your own machine.'
         : rtt === null
           ? 'Round-trip time could not be measured.'
-          : `Round trip to our test endpoint took ${ms(rtt)}.`,
+          : opaqueControl
+            ? `A full request to ${controlHost ?? 'the test endpoint'} took ${ms(rtt)} to come back.`
+            : `Round trip to our test endpoint took ${ms(rtt)}.`,
       technical: loopback
         ? `The round trip completed in under ${ms(LOCAL_CONTROL_RTT_MS)}, which is faster than any real internet path. The control endpoint is therefore on this machine or LAN, and the measurement describes a loopback interface rather than your internet connection.
 
 This is reported as not measurable rather than healthy on purpose. Treating it as healthy meant every genuine round trip looked like unexplained excess, and the engine confidently blamed the reader's provider for latency it had never measured.`
-        : `Latency to our own endpoint, independent of the site being tested. This is the load-bearing measurement in the whole report: without a baseline for your connection there is no way to separate "that site is slow" from "your connection is slow", and any tool claiming to do so without one is guessing. Healthy is under ${String(THRESHOLDS.clientRttMs.ok)} ms.`,
+        : `Latency to the control endpoint, independent of the site being tested. This is the load-bearing measurement in the whole report: without a baseline for your connection there is no way to separate "that site is slow" from "your connection is slow", and any tool claiming to do so without one is guessing.
+
+${
+  opaqueControl
+    ? `Measured against ${client.controlOrigin ?? 'a third-party endpoint'} with an opaque no-cors fetch, because that endpoint is not another instance of this tool and grants no permission to read its response. The timing is real; what it covers is a complete request and reply, including whatever work the endpoint does before answering. That is a different instrument from a bare round trip and is judged on its own band — healthy is under ${String(THRESHOLDS.clientRttOpaqueMs.ok)} ms, against ${String(THRESHOLDS.clientRttMs.ok)} ms for the readable measurement below.`
+    : `Measured against a paired instance's /api/ping, which returns a near-empty readable body and does as close to no work as possible, so the figure is dominated by the network. Healthy is under ${String(THRESHOLDS.clientRttMs.ok)} ms.`
+}`,
       /*
        * Every figure here describes the control round trip, so every one of them
        * is meaningless over loopback — not just the median.

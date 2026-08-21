@@ -1,8 +1,9 @@
 import type { ClientEvidence, Evidence, ServerEvidence, VantageHealth } from '@dwc/contracts';
-import { ms } from './findings/helpers.js';
+import { hostOf, ms } from './findings/helpers.js';
 import { compareRoute } from './route.js';
 import { instabilityRatio, lossRatio } from './stats.js';
 import {
+  clientRttBand,
   controlCanAnchorPath,
   controlIsLoopback,
   MIN_SAMPLES_FOR_VARIANCE,
@@ -198,7 +199,9 @@ export function assessUserConnection(client: ClientEvidence | null): VantageHeal
     };
   }
 
-  const rtt = classify(client.control.median, THRESHOLDS.clientRttMs);
+  // Paired and unpaired controls are different instruments; see `clientRttBand`.
+  const rttBand = clientRttBand(client);
+  const rtt = classify(client.control.median, rttBand);
   const jitter = classify(client.control.jitter, THRESHOLDS.clientJitterMs);
   const loss = classify(lossRatio(client.control), THRESHOLDS.clientLossRatio);
   const throughput = client.throughput?.consented
@@ -210,7 +213,7 @@ export function assessUserConnection(client: ClientEvidence | null): VantageHeal
 
   const score = clampScore(
     100 -
-      graded(client.control.median, THRESHOLDS.clientRttMs, 18, 40) -
+      graded(client.control.median, rttBand, 18, 40) -
       graded(client.control.jitter, THRESHOLDS.clientJitterMs, 10, 22) -
       graded(lossValue, THRESHOLDS.clientLossRatio, 20, 45) -
       gradedInverted(throughputValue, THRESHOLDS.throughputBps, 10, 22),
@@ -235,20 +238,6 @@ export function assessUserConnection(client: ClientEvidence | null): VantageHeal
  */
 function against(client: ClientEvidence): string {
   return client.controlOrigin === null ? '' : ` to ${hostOf(client.controlOrigin)}`;
-}
-
-/**
- * The host part of an origin, without reaching for the URL global.
- *
- * This package is pure by rule — no I/O, no clock, no randomness — and leaning on
- * an ambient platform global weakens that for the sake of trimming a scheme. The
- * input is a validated origin from the API config, so there is no parsing to do
- * beyond dropping the scheme and anything after the authority.
- */
-function hostOf(origin: string): string {
-  const withoutScheme = origin.replace(/^[a-z][\w+.-]*:\/\//i, '');
-  const end = withoutScheme.search(/[/?#]/);
-  return end === -1 ? withoutScheme : withoutScheme.slice(0, end);
 }
 
 function describeClient(status: Band3 | 'unknown', client: ClientEvidence): string {

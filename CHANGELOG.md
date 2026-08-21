@@ -3,6 +3,58 @@
 Notable changes to the application. Package-level changes are tracked by Changesets in each
 package's own changelog. See [VERSIONING.md](VERSIONING.md) for what each version number means.
 
+## [0.6.0] — 2026-08-20
+
+Engine `1.5.0`. Fixes a measurement bug that was reporting healthy connections as slow, and stops the
+report giving equal billing to vantages it could not measure.
+
+### Fixed
+
+- **`CONTROL_URL` no longer loses its path, which was making fast connections look slow.** The value
+  was reduced to a bare origin at boot, reasoning that the browser appends `/api/ping`. That is only
+  true when the endpoint turns out to be another instance of this app — anything else is fetched
+  exactly as configured. So the `https://www.google.com/generate_204` printed in this file, in the
+  README and in `.env.example` became a request for the Google **home page**, twelve times a run, and
+  the weight of that page was reported as the reader's latency. Measured on a 100 Mb line in Cape Town
+  that pings in 11 ms: **957 ms** with the path stripped, **30 ms** with it intact. The report duly
+  called the connection slow and unsteady — a false accusation against someone's internet provider,
+  which is the one thing this tool exists not to do.
+- **A round trip is now judged against the instrument that produced it.** `THRESHOLDS.clientRttMs`
+  was written for a paired instance's `/api/ping` — a readable, near-empty body — and was being applied
+  unchanged to an opaque `no-cors` fetch, which settles on the whole response and includes whatever
+  work a third-party endpoint does before answering. The gap is small but systematic and always
+  upward: fetching the identical URL both ways measured 15 ms readable against 24 ms opaque, and 49 ms
+  against 55 ms. A separate `clientRttOpaqueMs` band absorbs it, sized from those measurements rather
+  than chosen for comfort — wide enough that the instrument alone cannot tip a healthy link into
+  "degraded", narrow enough that a genuinely slow one is still convicted.
+- **The copy no longer describes an opaque page fetch as "a small request to our test server".** It
+  names the endpoint that answered, says the figure covers a whole request and reply so it reads higher
+  than a speed test's latency number, and drops to medium confidence — the endpoint's own response time
+  is folded in and cannot be separated out from a browser.
+- **`CONTROL_URL` is refused at boot when it points somewhere the browser cannot reach across the
+  internet** — loopback, private, link-local or documentation space. The verdict layer already declined
+  to judge a loopback control, but silently and much later, and `.env.example` had promised outright
+  refusal for some time.
+- **CI installs without a compiler again.** `better-sqlite3` has no `install` script but does ship a
+  `binding.gyp`, so approving it for builds made pnpm fall back to an implicit `node-gyp rebuild` —
+  compiling from source on every install. `ubuntu-latest` has `make` and the Playwright container the
+  e2e job runs in does not, so that job alone failed with `not found: make`. Nothing was gained by the
+  compile: prebuilds ship for every platform this project targets and were already the binary in use.
+
+### Changed
+
+- **Vantages that could not be measured no longer take a card.** "Your connection" and "the path
+  between" were rendering as full tiles whose only content was an explanation of their own absence,
+  side by side with a vantage that had actually been measured. They now move to a line under the grid,
+  which reflows to however many tiles remain. Nothing is hidden and nothing is softened — the note
+  carries the engine's own wording, including the reason and what would change it — and a vantage that
+  is merely _healthy_ still gets its tile, because "your connection tested healthy" is worth being
+  told. The CLI prints the same split.
+- **The speed-test opt-in is a switch in a labelled row rather than a bare checkbox.** The checkbox was
+  1.1 rem — under half the `--dwc-tap-target` the rest of the app holds to, and the control on that
+  page most likely to be reached for on a phone. The new `dwc-switch` is a real `<button role="switch">`,
+  so Space and Enter both work and the state is announced; the whole row is a click target.
+
 ## [0.5.0] — 2026-08-20
 
 Engine `1.4.0`. Makes the tool safe to hand to other people, honest about what its own deployment stops

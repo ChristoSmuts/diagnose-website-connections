@@ -258,6 +258,74 @@ describe('honesty guarantees', () => {
       expect(verdict.vantages.networkPath.summary).toMatch(/CONTROL_URL/);
     });
 
+    /**
+     * The Cape Town false accusation, in one test.
+     *
+     * An opaque control is a different instrument from a paired `/api/ping`: the
+     * fetch settles on the whole response rather than after a known-empty body,
+     * and the endpoint is a third party doing unknown work. Measured on a 100 Mb
+     * line, the same URL fetched both ways came back 15 ms readable and 24 ms
+     * opaque — small, systematic, and always upward.
+     *
+     * Held to the ping band, a reader sitting just under 60 ms readable tips over
+     * it on the instrument alone and is told their connection is slow. 68 ms is
+     * exactly that: past `clientRttMs.ok` (60) and inside `clientRttOpaqueMs.ok`
+     * (75).
+     */
+    const nearBoundary = (paired: boolean) =>
+      makeEvidence({
+        clientRttSamples: [68, 68, 68, 68, 68],
+        controlOrigin: 'https://www.gstatic.com',
+        controlIsPaired: paired,
+      });
+
+    it('does not call a healthy link slow just because it was timed opaquely', () => {
+      const verdict = analyse(nearBoundary(false));
+
+      expect(verdict.vantages.userConnection.status).toBe('ok');
+      expect(verdict.findings.some((f) => f.code === 'client-high-latency')).toBe(false);
+    });
+
+    it('still calls the same figure degraded when a paired instance produced it', () => {
+      const verdict = analyse(nearBoundary(true));
+
+      expect(verdict.vantages.userConnection.status).toBe('degraded');
+      expect(verdict.findings.some((f) => f.code === 'client-high-latency')).toBe(true);
+    });
+
+    /**
+     * The wider band must not become a blanket excuse. A genuinely bad link is
+     * several hundred milliseconds, and no instrument accounts for that.
+     */
+    it('still convicts a genuinely slow link measured opaquely', () => {
+      const verdict = analyse(
+        makeEvidence({
+          clientRttSamples: [400, 410, 395, 405, 402],
+          controlOrigin: 'https://www.gstatic.com',
+          controlIsPaired: false,
+        }),
+      );
+
+      expect(verdict.vantages.userConnection.status).toBe('bad');
+      expect(verdict.findings.some((f) => f.code === 'client-high-latency')).toBe(true);
+    });
+
+    it('does not present an opaque page fetch as if it were a ping', () => {
+      const verdict = analyse(
+        makeEvidence({
+          clientRttSamples: [400, 410, 395, 405, 402],
+          controlOrigin: 'https://www.gstatic.com',
+          controlIsPaired: false,
+        }),
+      );
+
+      const latency = verdict.findings.find((f) => f.code === 'client-high-latency');
+      expect(latency?.plain).toContain('www.gstatic.com');
+      expect(latency?.plain).not.toMatch(/small request/i);
+      // The endpoint's own work is folded in and cannot be separated out.
+      expect(latency?.confidence).toBe('medium');
+    });
+
     it('keeps judging the route when the endpoint is a paired instance', () => {
       const verdict = analyse(scenarios.remoteControl());
       expect(verdict.vantages.networkPath.status).not.toBe('unknown');

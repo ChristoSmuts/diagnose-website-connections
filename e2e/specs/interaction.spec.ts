@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { HEALTHY_TARGET, openApp, openSidebar, verdictHeadline } from '../support/app.js';
 
 /**
@@ -83,5 +83,67 @@ test.describe('the confirmation dialog', () => {
     expect(offset.vertical).toBeLessThan(12);
     expect(offset.left).toBeGreaterThan(0);
     expect(offset.top).toBeGreaterThan(0);
+  });
+});
+
+test.describe('the speed-test switch', () => {
+  /**
+   * The control that decides whether the run spends the reader's data, and until
+   * now the only interactive thing on the landing page with no coverage at all.
+   *
+   * It replaced a bare `<input type="checkbox">`, so these assert the behaviour a
+   * checkbox gave for free and a custom element has to earn back: a real toggle,
+   * a state a screen reader can read, and keyboard operation.
+   */
+  const toggle = (page: Page) => page.locator('dwc-switch');
+
+  test('toggles on click and reports its state to assistive technology', async ({ page }) => {
+    await openApp(page);
+
+    const control = toggle(page).getByRole('switch');
+    await expect(control).toHaveAttribute('aria-checked', 'false');
+
+    await control.click();
+    await expect(control).toHaveAttribute('aria-checked', 'true');
+
+    await control.click();
+    await expect(control).toHaveAttribute('aria-checked', 'false');
+  });
+
+  test('toggles from the keyboard with Space', async ({ page }) => {
+    await openApp(page);
+
+    const control = toggle(page).getByRole('switch');
+    await control.focus();
+    await page.keyboard.press(' ');
+
+    await expect(control).toHaveAttribute('aria-checked', 'true');
+  });
+
+  /**
+   * The row is a click target as well as the switch, so a click that passes
+   * through the switch must not be counted by both and cancel itself out.
+   */
+  test('toggles once when the surrounding row is clicked', async ({ page }) => {
+    await openApp(page);
+
+    const control = toggle(page).getByRole('switch');
+    // Somewhere on the row that is definitely not the switch.
+    await page.getByText('Measure my connection speed too').click();
+
+    await expect(control).toHaveAttribute('aria-checked', 'true');
+  });
+
+  /**
+   * A 1.1rem checkbox was the previous control, well under the tap target the
+   * rest of the app holds to and the likeliest thing on this page to be reached
+   * for on a phone.
+   */
+  test('offers a tap target the rest of the app would accept', async ({ page }) => {
+    await openApp(page);
+
+    const box = await toggle(page).getByRole('switch').boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
   });
 });

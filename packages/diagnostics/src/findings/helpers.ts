@@ -93,3 +93,17 @@ export const ms = (n: number): string => `${String(Math.round(n))} ms`;
  */
 export const plural = (count: number, singular: string, pluralForm?: string): string =>
   `${String(count)} ${count === 1 ? singular : (pluralForm ?? `${singular}s`)}`;
+
+/**
+ * The host part of an origin, without reaching for the URL global.
+ *
+ * This package is pure by rule — no I/O, no clock, no randomness — and leaning on
+ * an ambient platform global weakens that for the sake of trimming a scheme. The
+ * input is a validated origin from the API config, so there is no parsing to do
+ * beyond dropping the scheme and anything after the authority.
+ */
+export function hostOf(origin: string): string {
+  const withoutScheme = origin.replace(/^[a-z][\w+.-]*:\/\//i, '');
+  const end = withoutScheme.search(/[/?#]/);
+  return end === -1 ? withoutScheme : withoutScheme.slice(0, end);
+}

@@ -50,17 +50,30 @@ test.describe('running a diagnostic', () => {
      * measured" rather than a flattering "healthy" — reporting the ~3ms loopback
      * round trip as a healthy connection is what previously made the engine blame
      * the reader's ISP for latency it had never measured.
+     *
+     * The promise is unchanged; where it is kept has moved. An unmeasured vantage
+     * no longer takes a tile — it is named in a note under the grid instead — so
+     * this asserts the absence of the tile *and* the presence of the explanation.
+     * Asserting only the first would pass just as happily if the report had
+     * quietly dropped the whole subject.
      */
     await openApp(page);
     await runDiagnostic(page);
 
+    // The server vantage was measured, so exactly one tile survives.
     const tiles = page.locator('dwc-vantage-tile');
-    await expect(tiles).toHaveCount(3);
+    await expect(tiles).toHaveCount(1);
+    await expect(tiles.first()).toContainText(/their server/i);
+    await expect(tiles.first()).not.toContainText(/your connection/i);
 
-    const yourConnection = tiles.nth(1);
-    await expect(yourConnection).toContainText(/not measured/i);
+    // Both client vantages are accounted for, with the reason and the remedy.
+    const note = page.locator('[data-testid="not-measured"]');
+    await expect(note).toBeVisible();
+    await expect(note).toContainText(/your connection/i);
+    await expect(note).toContainText(/the path between/i);
+    await expect(note).toContainText(/CONTROL_URL/);
 
-    // And the prose must agree with the tile beside it.
+    // And the prose must agree with the note beside it.
     await expect(page.locator('dwc-verdict-banner .prose')).not.toContainText(/round trip/i);
   });
 
@@ -100,6 +113,6 @@ test.describe('running a diagnostic', () => {
     await expect(page.locator('dwc-verdict-banner .prose')).toContainText(/DNS|does not exist/i);
 
     // And it must not pretend to know anything about the reader's connection.
-    await expect(page.locator('dwc-vantage-tile').nth(1)).toContainText(/not measured/i);
+    await expect(page.locator('[data-testid="not-measured"]')).toContainText(/your connection/i);
   });
 });

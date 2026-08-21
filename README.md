@@ -167,13 +167,30 @@ connection once had the engine blaming readers' providers for latency it had nev
 
 ```bash
 # .env
-CONTROL_URL=https://www.google.com/generate_204
+CONTROL_URL=https://www.gstatic.com/generate_204
 ```
 
-**Any URL your browser can reach will do.** The round trip is timed without reading the response, so
-the far end grants nothing and does not need to know this tool exists. The endpoint above returns an
-empty 204 and exists for connectivity checks, which makes it a cheap thing to call — but it is a third
-party, and nothing here contacts one unless you set this. Nothing is contacted by default.
+**Any URL your browser can reach will do**, and the whole URL is used, path included. The round trip
+is timed without reading the response, so the far end grants nothing and does not need to know this
+tool exists. The endpoint above returns an empty 204 and exists for connectivity checks, which makes
+it a cheap thing to call — and it is a static host, so no cookies and no redirect to a country domain.
+It is a third party, and nothing here contacts one unless you set this. Nothing is contacted by
+default. A local, private or link-local address is refused when the server starts.
+
+**Point it at an empty endpoint, not at a front page.** A home page is hundreds of kilobytes, and its
+transfer time would be reported as your latency. Measured from Cape Town on a 100 Mb line that pings
+in 11 ms:
+
+| `CONTROL_URL`                          | Reported round trip |
+| -------------------------------------- | ------------------- |
+| `https://cloudflare.com/cdn-cgi/trace` | 15 ms               |
+| `https://www.gstatic.com/generate_204` | 28 ms               |
+| `https://www.google.com/generate_204`  | 30 ms               |
+| `https://www.google.com` — no path     | 519 ms              |
+
+The last row is not a hypothetical. Until 0.6.0 the path was stripped from this setting at boot, so
+every one of the documented values behaved like that bottom row, and healthy connections were reported
+as slow.
 
 How much it unlocks depends on what you point it at:
 
@@ -188,14 +205,17 @@ to the site, and that subtraction assumes the two are comparable measurements. A
 from whichever edge is nearest you, by design — so the baseline comes out short by however far the site
 actually is, and the leftover the report would attribute to your provider is really just distance.
 Blaming someone's ISP for geography is the same class of mistake as blaming one for loopback, so the
-route stays unjudged rather than guessed at.
+route stays unjudged rather than guessed at. If you want a route verdict without running a second
+instance, `REFERENCE_URLS` is the way — it compares destinations rather than vantages.
 
 A paired instance can be a second deployment or a tunnel back to the one you are running, and needs
 your origin in its `CORS_ORIGINS`. The server never fetches this URL; only your browser does.
 
 Every report says which endpoint its baseline came from, because "42 ms round trip" means something
-different depending on what answered. If the endpoint cannot be reached, both vantages go back to
-_not measured_ rather than falling back to something that looks like an answer.
+different depending on what answered — and a figure measured against an arbitrary endpoint is judged
+on its own scale, because timing a whole response is not the same instrument as timing a ping. If the
+endpoint cannot be reached, both vantages go back to _not measured_ rather than falling back to
+something that looks like an answer.
 
 ### Site icons
 

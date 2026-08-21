@@ -17,13 +17,17 @@ export interface ClientProbeOptions {
   /** The site being diagnosed, for the coarse target measurement. */
   targetUrl: string;
   /**
-   * Origin to measure the baseline against. Null means this one.
+   * URL to measure the baseline against, path included. Null means this origin.
    *
    * Same-origin is right for a hosted instance and useless for a local one: the
    * round trip is then loopback at 1-5ms, which describes no internet connection
    * at all. Pointing this at another instance reachable across the internet is
    * what lets a self-hosted install judge the user's link and the path. See
    * CONTROL_URL in the API config.
+   *
+   * The path matters. An endpoint that is not another instance is fetched exactly
+   * as given, so `https://example.net/generate_204` times an empty 204 while
+   * `https://example.net` times whatever that host serves at its root.
    */
   controlUrl?: string | null;
   /**
@@ -52,7 +56,8 @@ const THROUGHPUT_TIMEOUT_MS = 10_000;
 export async function runClientProbe(options: ClientProbeOptions): Promise<ClientEvidence> {
   const { onProgress = () => {}, signal } = options;
 
-  const controlOrigin = options.controlUrl ?? null;
+  const controlUrl = options.controlUrl ?? null;
+  const controlOrigin = controlUrl === null ? null : originOf(controlUrl);
 
   onProgress('Measuring your connection…');
 
@@ -66,10 +71,22 @@ export async function runClientProbe(options: ClientProbeOptions): Promise<Clien
    * cannot possibly work out for itself: from out here a CDN-fronted instance
    * and a directly-reachable one are indistinguishable.
    */
-  const identity = await probeControl(controlOrigin, signal);
+  const identity = await probeControl(controlUrl, signal);
+
+  /*
+   * A paired instance gets `/api/ping`; anything else is fetched exactly as
+   * configured, path and all.
+   *
+   * That distinction is why `CONTROL_URL` keeps its path (see `controlUrl` in the
+   * API config). Resolving `/api/ping` against the configured URL discards the
+   * path for the paired branch, which is correct — an instance always answers
+   * there — while the unpaired branch must not, because the whole point of
+   * pointing at `…/generate_204` is to time an empty 204 rather than whatever
+   * that host serves at its root.
+   */
   const control = identity.paired
-    ? await measureLatency(`${controlOrigin ?? ''}/api/ping`, LATENCY_SAMPLES, signal)
-    : await measureOpaqueLatency(controlOrigin ?? '', LATENCY_SAMPLES, signal);
+    ? await measureLatency(resolveAgainst(controlUrl, '/api/ping'), LATENCY_SAMPLES, signal)
+    : await measureOpaqueLatency(controlUrl ?? '', LATENCY_SAMPLES, signal);
 
   onProgress('Measuring the route to this site…');
   const target = await measureTarget(options.targetUrl, signal);
@@ -108,7 +125,7 @@ export async function runClientProbe(options: ClientProbeOptions): Promise<Clien
      * cleared the threshold, and the report called a loopback interface a healthy
      * internet connection. The browser knows the address; it should say so.
      */
-    controlIsLocal: isLocalHost(controlOrigin),
+    controlIsLocal: isLocalHost(controlUrl),
     /*
      * Recorded structurally rather than left to the prose.
      *
@@ -151,11 +168,42 @@ export async function runClientProbe(options: ClientProbeOptions): Promise<Clien
 }
 
 /**
- * Whether an origin names this machine or this local network.
+ * The origin of a configured control URL, for the record kept on the evidence.
+ *
+ * The evidence carries an origin rather than the full URL because that is what
+ * the report shows — "42 ms round trip to www.google.com" — and a path in the
+ * middle of that sentence would say nothing a reader can use. What was actually
+ * fetched is a separate question, answered by the code that fetches it.
+ */
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * An absolute path on the same origin as a control URL, or on this one.
+ *
+ * Null means same-origin, which is the default and needs no resolution at all.
+ */
+function resolveAgainst(controlUrl: string | null, path: string): string {
+  if (controlUrl === null) return path;
+  try {
+    return new URL(path, controlUrl).toString();
+  } catch {
+    return path;
+  }
+}
+
+/**
+ * Whether a URL names this machine or this local network.
  *
  * Null means same-origin, so the page's own hostname is the one to judge — which
  * is the common case and the one that matters: the default deployment is
- * self-hosted on localhost.
+ * self-hosted on localhost. Only the hostname is read, so a full URL and a bare
+ * origin are equally acceptable.
  *
  * Deliberately generous about what counts as local. A false positive costs a
  * vantage that reads "not measured", which is merely unhelpful. A false negative
@@ -361,9 +409,12 @@ function readConnectionHint(): ClientEvidence['connectionHint'] {
  * A CORS rejection, a 404 or an unreachable host all land in the same place and
  * all mean the same thing: not an instance of this app. Same-origin is an
  * instance by definition, but still has to be asked about the edge.
+ *
+ * Takes the configured URL rather than its origin, since `/api/health` has to be
+ * resolved against it either way and the caller has no reason to hold both.
  */
 async function probeControl(
-  origin: string | null,
+  controlUrl: string | null,
   signal?: AbortSignal,
 ): Promise<{ paired: boolean; edgeTerminated: boolean }> {
   const controller = new AbortController();
@@ -371,17 +422,17 @@ async function probeControl(
   const abort = (): void => controller.abort();
   signal?.addEventListener('abort', abort);
   try {
-    const response = await fetch(`${origin ?? ''}/api/health?probe=control`, {
+    const response = await fetch(resolveAgainst(controlUrl, '/api/health?probe=control'), {
       cache: 'no-store',
       signal: controller.signal,
     });
-    if (!response.ok) return { paired: origin === null, edgeTerminated: false };
+    if (!response.ok) return { paired: controlUrl === null, edgeTerminated: false };
     const body = (await response.json()) as { edgeTerminated?: unknown };
     return { paired: true, edgeTerminated: body.edgeTerminated === true };
   } catch {
     // Same-origin is still an instance even if this one call failed; anything
     // else is not, and gets the opaque measurement instead.
-    return { paired: origin === null, edgeTerminated: false };
+    return { paired: controlUrl === null, edgeTerminated: false };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', abort);

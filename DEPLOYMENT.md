@@ -200,6 +200,11 @@ is what reaching _that particular site_ costs _them_. Nothing about your deploym
 REFERENCE_URLS=https://www.google.com/generate_204,https://cloudflare.com/cdn-cgi/trace
 ```
 
+Pick empty, cheap endpoints — the two above return a 204 and a couple of hundred bytes respectively.
+A front page would work in the sense that it can be timed, but its transfer time would become the
+reader's floor, and the floor is the number everything else is measured against. The same rule applies
+to `CONTROL_URL`, where getting it wrong once reported 957 ms as a reader's latency.
+
 Empty by default, and nothing contacts a third party unless you set it. That is the same rule
 `CONTROL_URL` follows, for the same reason: this tool otherwise talks to nobody but the site being
 diagnosed.

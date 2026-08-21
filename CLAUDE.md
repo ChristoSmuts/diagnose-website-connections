@@ -52,9 +52,18 @@ trustworthy about attribution.
    round trip measures ~15 ms, above the 8 ms line, and the report duly called it a healthy connection.
    Getting this wrong made the engine blame the reader's ISP for latency it had never measured.
    `CONTROL_URL` is the supported way out — it points the browser at a control endpoint across the
-   internet — but it does **not** relax the threshold. A local `CONTROL_URL` is still refused, and
+   internet — but it does **not** relax the threshold. A local `CONTROL_URL` is refused at boot, and
    `controlOrigin` on the evidence records which endpoint answered, because the same round-trip figure
    means something different depending on what produced it.
+
+   **Unmeasured vantages are demoted, never dropped.** They no longer take a tile — `renderVantages()`
+   in `apps/web/src/report-view.ts` moves them to a note under the grid, and the CLI does the same.
+   The note carries the engine's `summary` **verbatim**, because that string holds both the reason and
+   the remedy and is the one guarded by `copy.test.ts`. Do not paraphrase it in the UI, and do not
+   "tidy" the note back into a card: a card whose only content is an explanation of its own absence
+   was competing for attention with a vantage that had actually been measured. A vantage that is
+   merely _healthy_ still gets its tile — that argument was always about not hiding good news.
+
 3. **Provenance travels with every number** (`measured` | `inferred` | `unavailable`), structurally,
    so an inferred value cannot render as an observed one.
 4. **"Inconclusive" is a valid verdict.** Admitting ignorance beats inventing a culprit.
@@ -72,6 +81,18 @@ trustworthy about attribution.
    answers from Cape Town, both records are correct, and picking a winner would hide what anycast is.
    Everything derived from a header, a PTR name or a registry record is `inferred` and names its source
    in the row label; only round trips and addresses are `measured`.
+8. **Judge a number against the instrument that produced it.** A paired instance is asked for a
+   readable, near-empty `/api/ping`; anything else is timed with an opaque `no-cors` fetch that settles
+   on the whole response, including whatever work a third party does before answering. `clientRttBand()`
+   picks the band from `controlIsPaired` — one ruler for two instruments is how a Cape Town fibre line
+   was told its connection was slow. The bands are set from measurements recorded in `thresholds.ts`,
+   not from intuition; widen them only against new measurements.
+
+   The related trap: **`CONTROL_URL` keeps its path.** It used to be reduced to `parsed.origin`, which
+   is right for the paired branch (`/api/ping` is appended) and catastrophic for the unpaired one,
+   which fetches the configured URL exactly as given. The documented `…/generate_204` silently became
+   a request for a front page — 957 ms against 30 ms — and that transfer time was reported as the
+   reader's latency.
 
 ## Constraints that will bite you
 

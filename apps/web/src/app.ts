@@ -366,19 +366,70 @@ export class DwcApp extends LitElement {
         width: 100%;
       }
 
-      .consent {
+      /*
+       * The one setting on the landing page, shaped like a setting.
+       *
+       * It replaced a bare checkbox whose 1.1rem box read as small print and sat
+       * well under the --dwc-tap-target the rest of the app holds to. Bordered and
+       * sized like a row so the choice is visibly a choice.
+       */
+      .option {
         display: flex;
-        align-items: flex-start;
-        gap: var(--dwc-space-2);
-        justify-content: center;
-        font-size: var(--dwc-text-sm);
-        color: var(--dwc-text-muted);
+        align-items: center;
+        gap: var(--dwc-space-4);
+        width: 100%;
+        max-width: 40rem;
+        margin: 0 auto;
+        padding: var(--dwc-space-3) var(--dwc-space-4);
+        border: 1px solid var(--dwc-border);
+        border-radius: var(--dwc-radius-lg);
+        background: var(--dwc-surface-raised);
+        box-shadow:
+          inset 0 1px 0 var(--dwc-highlight),
+          var(--dwc-shadow-xs);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color var(--dwc-duration-fast) var(--dwc-ease),
+          background-color var(--dwc-duration-fast) var(--dwc-ease);
       }
-      .consent input {
-        width: 1.1rem;
-        height: 1.1rem;
-        margin-top: 0.15rem;
-        accent-color: var(--dwc-brand);
+      .option:hover {
+        border-color: var(--dwc-brand-border);
+      }
+      .option[data-on='true'] {
+        border-color: var(--dwc-brand-border);
+        background: var(--dwc-brand-subtle);
+      }
+      .option-glyph {
+        display: grid;
+        place-items: center;
+        flex: none;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: var(--dwc-radius);
+        background: var(--dwc-surface-sunken);
+        color: var(--dwc-text-subtle);
+        --dwc-icon-size: 1.15rem;
+      }
+      .option[data-on='true'] .option-glyph {
+        background: var(--dwc-brand);
+        color: var(--dwc-text-inverse);
+      }
+      .option-text {
+        flex: 1;
+        min-width: 0;
+      }
+      .option-title {
+        margin: 0;
+        font-size: var(--dwc-text-sm);
+        font-weight: var(--dwc-weight-semibold);
+        color: var(--dwc-text);
+      }
+      .option-note {
+        margin: 0;
+        font-size: var(--dwc-text-xs);
+        line-height: var(--dwc-leading-normal);
+        color: var(--dwc-text-muted);
       }
 
       .panel {
@@ -1290,19 +1341,34 @@ export class DwcApp extends LitElement {
         )}
       </div>
 
-      <label class="consent">
-        <input
-          type="checkbox"
-          .checked=${this.throughputConsent}
-          @change=${(e: Event) => {
-            this.throughputConsent = (e.target as HTMLInputElement).checked;
-          }}
-        />
-        <span>
-          Also measure my connection speed. This downloads about 4&nbsp;MB and uploads 1&nbsp;MB, so
-          skip it on a metered connection.
+      <!-- Clicking anywhere on the row toggles it, but a click that already went
+           through the switch must not be counted twice. -->
+      <div
+        class="option"
+        data-on=${this.throughputConsent ? 'true' : 'false'}
+        @click=${(e: MouseEvent) => {
+          const hitSwitch = e
+            .composedPath()
+            .some((n) => (n as HTMLElement).localName === 'dwc-switch');
+          if (!hitSwitch) this.throughputConsent = !this.throughputConsent;
+        }}
+      >
+        <span class="option-glyph"><dwc-icon name="gauge"></dwc-icon></span>
+        <span class="option-text">
+          <p class="option-title">Measure my connection speed too</p>
+          <p class="option-note">
+            Downloads about 4&nbsp;MB and uploads 1&nbsp;MB. Skip it on mobile data.
+          </p>
         </span>
-      </label>
+        <dwc-switch
+          aria-label="Measure my connection speed too"
+          .checked=${this.throughputConsent}
+          ?disabled=${this.running}
+          @change=${(e: CustomEvent<{ checked: boolean }>) => {
+            this.throughputConsent = e.detail.checked;
+          }}
+        ></dwc-switch>
+      </div>
 
       ${
         this.running

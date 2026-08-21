@@ -5,6 +5,8 @@
  * with no configuration at all, which is the whole point of a self-hosted tool.
  */
 
+import { isUnreachableControlHost } from './safety/ssrf.ts';
+
 const num = (value: string | undefined, fallback: number): number => {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -104,8 +106,23 @@ export interface Config {
  * A typo here would otherwise surface as every client vantage silently reading
  * "not measured", which is indistinguishable from the default local behaviour —
  * exactly the sort of misconfiguration that costs an hour to spot.
+ *
+ * The path is kept, and that is load-bearing. It used to be stripped to a bare
+ * origin, reasoning that the browser appends `/api/ping` — true only when the
+ * endpoint turns out to be another instance of this app. Anything else is fetched
+ * exactly as configured, so stripping quietly turned the documented
+ * `https://www.google.com/generate_204` into twelve fetches of the Google home
+ * page and reported the weight of that page as the reader's latency. A fibre line
+ * that pings in 11 ms was told its connection was slow. Whatever is configured
+ * here is what gets timed.
+ *
+ * An address the browser cannot reach across the internet is refused outright —
+ * loopback, private, link-local or documentation space. The verdict layer declines
+ * to judge a loopback control anyway, via `controlIsLoopback`, but silently and
+ * much later; a value that cannot possibly do what it was set for should stop the
+ * server instead.
  */
-function controlOrigin(value: string | undefined): string | null {
+function controlUrl(value: string | undefined): string | null {
   if (value === undefined || value.trim() === '') return null;
 
   let parsed: URL;
@@ -119,9 +136,16 @@ function controlOrigin(value: string | undefined): string | null {
     throw new Error(`CONTROL_URL must be http or https (got "${parsed.protocol}")`);
   }
 
-  // Stored as a bare origin: the browser appends /api/ping, and a trailing path
-  // or query on the configured value would produce a URL that 404s.
-  return parsed.origin;
+  if (isUnreachableControlHost(parsed.hostname)) {
+    throw new Error(
+      `CONTROL_URL must be a public address the browser can reach across the internet, and ` +
+        `"${parsed.hostname}" is not one. Measuring against it would describe this machine or this ` +
+        'network rather than anyone’s connection. Leave it unset for the honest local behaviour, ' +
+        'which reports the client vantages as not measured.',
+    );
+  }
+
+  return parsed.toString();
 }
 
 /**
@@ -217,7 +241,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       readsPerMinute: num(env.READS_PER_MINUTE, 600),
     },
     corsOrigins: list(env.CORS_ORIGINS, ['http://localhost:5173', 'http://localhost:4173']),
-    controlUrl: controlOrigin(env.CONTROL_URL),
+    controlUrl: controlUrl(env.CONTROL_URL),
     edgeTerminated: tristate(env.EDGE_TERMINATED),
     referenceUrls: referenceUrls(env.REFERENCE_URLS),
     trustProxy: trustProxy(env.TRUST_PROXY),

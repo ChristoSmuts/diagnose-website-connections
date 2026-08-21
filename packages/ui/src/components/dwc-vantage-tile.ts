@@ -8,9 +8,16 @@ import './dwc-icon.js';
  * One corner of the diagnostic triangle: their server, your connection, or the
  * path between.
  *
- * Showing all three side by side — including the ones that are *fine* — is the
- * point. "Your connection tested healthy" is genuinely useful information and
- * stops people troubleshooting the wrong thing.
+ * Showing the ones that are *fine* is the point. "Your connection tested healthy"
+ * is genuinely useful information and stops people troubleshooting the wrong end,
+ * so a passing vantage always gets a tile.
+ *
+ * A vantage that could not be measured is a different case and no longer renders
+ * here — the report demotes it to a note under the grid, where the same
+ * explanation reads at a weight matching its content. See `renderVantages` in the
+ * web app. The `unknown` state below is kept deliberately: the tile still has to
+ * render it when *nothing* was measured, and a component that silently could not
+ * express an absence would be worse than one that rarely needs to.
  */
 const STATUS_LABEL: Record<VantageStatus, string> = {
   ok: 'Healthy',

@@ -51,8 +51,52 @@ export class DwcReportView extends LitElement {
 
       @container (min-width: 34rem) {
         .tiles {
-          grid-template-columns: repeat(3, 1fr);
+          /* Set inline from the number of measured vantages. A fixed repeat(3)
+             left empty tracks behind whenever one could not be measured. */
+          grid-template-columns: repeat(var(--tiles, 3), 1fr);
         }
+      }
+
+      /* The unmeasured vantages, demoted but never dropped. Quieter than a tile
+         and louder than nothing, which is the whole point. */
+      .not-measured {
+        display: flex;
+        gap: var(--dwc-space-3);
+        align-items: start;
+        margin-top: calc(var(--dwc-space-6) * -1 + var(--dwc-space-3));
+        padding: var(--dwc-space-3) var(--dwc-space-4);
+        border: 1px solid var(--dwc-border);
+        border-radius: var(--dwc-radius-lg);
+        background: var(--dwc-surface-sunken);
+        color: var(--dwc-text-muted);
+        font-size: var(--dwc-text-sm);
+        line-height: var(--dwc-leading-normal);
+      }
+
+      .not-measured dwc-icon {
+        --dwc-icon-size: 1.1em;
+        flex: none;
+        margin-top: 0.15em;
+        color: var(--dwc-text-subtle);
+      }
+
+      .not-measured-head {
+        margin: 0 0 var(--dwc-space-1);
+        font-weight: var(--dwc-weight-semibold);
+        color: var(--dwc-text);
+      }
+
+      .not-measured-item {
+        margin: 0;
+      }
+
+      .not-measured-item + .not-measured-item {
+        margin-top: var(--dwc-space-2);
+      }
+
+      .not-measured-item strong {
+        font-weight: var(--dwc-weight-medium);
+        color: var(--dwc-text);
       }
 
       section {
@@ -153,6 +197,7 @@ export class DwcReportView extends LitElement {
           display: none !important;
         }
         .panel,
+        .not-measured,
         .tiles > * {
           break-inside: avoid;
         }
@@ -218,30 +263,7 @@ export class DwcReportView extends LitElement {
           ></dwc-score-dial>
         </dwc-verdict-banner>
 
-        <div class="tiles">
-          <dwc-vantage-tile
-            icon="server"
-            .status=${verdict.vantages.server.status}
-            .label=${verdict.vantages.server.label}
-            .summary=${verdict.vantages.server.summary}
-            .score=${verdict.vantages.server.score}
-          ></dwc-vantage-tile>
-          <dwc-vantage-tile
-            icon="wifi"
-            .status=${verdict.vantages.userConnection.status}
-            .label=${verdict.vantages.userConnection.label}
-            .summary=${verdict.vantages.userConnection.summary}
-            .score=${verdict.vantages.userConnection.score}
-          ></dwc-vantage-tile>
-          <dwc-vantage-tile
-            icon="route"
-            .status=${verdict.vantages.networkPath.status}
-            .label=${verdict.vantages.networkPath.label}
-            .summary=${verdict.vantages.networkPath.summary}
-            .score=${verdict.vantages.networkPath.score}
-          ></dwc-vantage-tile>
-        </div>
-
+        ${this.renderVantages(verdict)}
         ${evidence === null ? nothing : this.renderWaterfall(evidence)}
 
         <section>
@@ -397,6 +419,77 @@ export class DwcReportView extends LitElement {
 
     this.openChecks = next;
     this.requestUpdate();
+  }
+
+  /**
+   * The three corners of the triangle — but only the ones that were measured.
+   *
+   * A vantage with `status: 'unknown'` has no score, no bar and nothing to compare;
+   * it is a card-shaped explanation of an absence. Given equal weight beside a
+   * vantage that was actually measured, two of them made a local install look like
+   * a report that had mostly failed, when in fact it had done everything it could.
+   *
+   * What must not happen is the absence going unmentioned — a reader who is shown
+   * one tile and no note has been told the test was complete. So the unmeasured
+   * ones move to a line underneath carrying the engine's own explanation, verbatim.
+   * Note this hides nothing that is *fine*: a healthy "your connection" still gets
+   * its tile, because "your connection tested healthy" is a genuinely useful thing
+   * to be told and stops people troubleshooting the wrong end.
+   */
+  private renderVantages(verdict: Verdict): TemplateResult {
+    const all = [
+      { icon: 'server', vantage: verdict.vantages.server },
+      { icon: 'wifi', vantage: verdict.vantages.userConnection },
+      { icon: 'route', vantage: verdict.vantages.networkPath },
+    ];
+
+    const measured = all.filter((v) => v.vantage.status !== 'unknown');
+    // Nothing measured at all: there is no hierarchy left to express, and reducing
+    // Layer 1 to a banner and a footnote would read as a broken page rather than an
+    // honest one. Keep the cards.
+    const tiles = measured.length === 0 ? all : measured;
+    const omitted = measured.length === 0 ? [] : all.filter((v) => v.vantage.status === 'unknown');
+
+    return html`
+      <div class="tiles" style="--tiles: ${String(tiles.length)}">
+        ${tiles.map(
+          ({ icon, vantage }) => html`
+            <dwc-vantage-tile
+              icon=${icon}
+              .status=${vantage.status}
+              .label=${vantage.label}
+              .summary=${vantage.summary}
+              .score=${vantage.score}
+            ></dwc-vantage-tile>
+          `,
+        )}
+      </div>
+
+      ${
+        omitted.length === 0
+          ? nothing
+          : html`
+              <div class="not-measured" data-testid="not-measured">
+                <dwc-icon name="info"></dwc-icon>
+                <div>
+                  <p class="not-measured-head">
+                    ${omitted.length === 1 ? 'One thing we could not measure' : 'What we could not measure'}
+                  </p>
+                  <!-- The engine's wording, unchanged. It carries both the reason and
+                       the remedy, it is covered by copy.test.ts, and paraphrasing it
+                       here is how the prose ends up contradicting the report. -->
+                  ${omitted.map(
+                    ({ vantage }) => html`
+                      <p class="not-measured-item">
+                        <strong>${vantage.label}.</strong> ${vantage.summary}
+                      </p>
+                    `,
+                  )}
+                </div>
+              </div>
+            `
+      }
+    `;
   }
 
   /**

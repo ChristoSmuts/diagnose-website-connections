@@ -3,10 +3,25 @@ packages:
   - packages/*
   - e2e
 
-# better-sqlite3 ships a native addon. Prebuilt binaries exist for Node 24 on
-# Windows/Linux/macOS, so this resolves without a compiler toolchain.
+# better-sqlite3 ships a native addon, and its build is deliberately refused.
+#
+# Refused explicitly rather than by omission: pnpm 11 treats an undeclared build
+# script as an error (ERR_PNPM_IGNORED_BUILDS) and exits 1, so "false" is how you
+# say no.
+#
+# It has no `install` script but does have a `binding.gyp`, so approving it for
+# builds makes pnpm fall back to the implicit `node-gyp rebuild` — compiling from
+# source on every install, on every machine. That needs make and a C++ toolchain,
+# which `ubuntu-latest` happens to have and the Playwright container used by the
+# e2e job does not, so CI failed there and only there with "not found: make".
+#
+# Nothing was gained by the compile in the first place: prebuilds ship for every
+# platform this project targets, `lib/binding.js` falls back to
+# `prebuilds/<target>.node` when no `build/Release` exists, and that is the path
+# already in use. The Dockerfile still installs a toolchain, which stays useful
+# for an architecture with no prebuild.
 allowBuilds:
-  better-sqlite3: true
+  better-sqlite3: false
   # Build-time only, pulled in by the Tailwind CLI. Never shipped at runtime,
   # so these add no burden to a self-hosted deployment.
   '@parcel/watcher': true

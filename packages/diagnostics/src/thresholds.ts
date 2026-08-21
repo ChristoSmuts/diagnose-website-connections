@@ -32,8 +32,37 @@ export const THRESHOLDS = {
    */
   ttfbMs: { ok: 200, degraded: 600 } satisfies Band,
 
-  /** Browser → our control endpoint. Characterises the user's own link. */
+  /**
+   * Browser → a paired instance's `/api/ping`. Characterises the user's own link.
+   *
+   * Calibrated for that endpoint specifically: a readable, near-empty JSON body
+   * from a server doing as close to no work as possible.
+   */
   clientRttMs: { ok: 60, degraded: 200 } satisfies Band,
+
+  /**
+   * Browser → any other endpoint, timed opaquely.
+   *
+   * A `no-cors` fetch settles on the whole response rather than after reading a
+   * known-empty body, so it reads systematically higher than the ping band — but
+   * only by a little, and the difference was measured rather than guessed. On a
+   * 100 Mb line in Cape Town, fetching the identical URL both ways:
+   *
+   *     cloudflare.com/cdn-cgi/trace      readable 15 ms   opaque 24 ms
+   *     speed.cloudflare.com/__down       readable 49 ms   opaque 55 ms
+   *
+   * So roughly 6-9 ms of overhead. This band is the readable one plus about twice
+   * that, which keeps a link sitting near the boundary from flipping to "degraded"
+   * on the instrument alone, and costs nothing in sensitivity: a genuinely bad
+   * connection is several hundred milliseconds, not seventy.
+   *
+   * Resist widening it further. The bug that motivated splitting these bands was
+   * not the instrument at all — it was `CONTROL_URL` losing its path, so the
+   * browser timed the Google home page instead of an empty 204 and reported 957 ms
+   * as the reader's latency. A band wide enough to absorb *that* would have
+   * silenced every real complaint too.
+   */
+  clientRttOpaqueMs: { ok: 75, degraded: 220 } satisfies Band,
 
   /** Variation between consecutive samples — what makes calls and video stutter. */
   clientJitterMs: { ok: 20, degraded: 60 } satisfies Band,
@@ -177,6 +206,19 @@ export function controlCanAnchorPath(client: {
   if (client.controlIsPaired === false) return false;
   if (client.controlIsEdgeTerminated === true) return false;
   return true;
+}
+
+/**
+ * Which band the browser's control round trip should be judged against.
+ *
+ * Paired and unpaired controls are measured by different instruments — a readable
+ * `/api/ping` against an opaque `no-cors` fetch — and the flag that separates them
+ * already travels on the evidence. Reading it in one place stops the vantage, the
+ * finding and the check drifting apart, which is exactly how the report ends up
+ * contradicting itself.
+ */
+export function clientRttBand(client: { controlIsPaired?: boolean }): Band {
+  return client.controlIsPaired === false ? THRESHOLDS.clientRttOpaqueMs : THRESHOLDS.clientRttMs;
 }
 
 /**

@@ -56,12 +56,28 @@ console.log(
 );
 console.log(`\n  ${verdict.plain}\n`);
 
-for (const vantage of [
+/*
+ * Measured vantages first, unmeasured ones gathered underneath — the same split
+ * the report makes. A CLI run never has browser evidence, so two of the three are
+ * always unmeasured here and listing them inline buried the one that mattered.
+ */
+const vantages = [
   verdict.vantages.server,
   verdict.vantages.userConnection,
   verdict.vantages.networkPath,
-]) {
+];
+const measured = vantages.filter((v) => v.status !== 'unknown');
+const unmeasured = measured.length === 0 ? [] : vantages.filter((v) => v.status === 'unknown');
+
+for (const vantage of measured.length === 0 ? vantages : measured) {
   console.log(`  [${vantage.status.padEnd(8)}] ${vantage.label.padEnd(18)} ${vantage.summary}`);
+}
+
+if (unmeasured.length > 0) {
+  console.log('\n  NOT MEASURED');
+  for (const vantage of unmeasured) {
+    console.log(`    ${vantage.label} — ${vantage.summary}`);
+  }
 }
 
 console.log('\n  MEASUREMENTS');

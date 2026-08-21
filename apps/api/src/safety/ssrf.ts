@@ -128,6 +128,39 @@ export function assertAddressAllowed(address: string): void {
   }
 }
 
+/**
+ * Whether a hostname is unusable as a control endpoint for the browser.
+ *
+ * Distinct from `describeBlockedAddress`, and deliberately so: that answers "may
+ * the probe engine connect to this?" about a resolved address, whereas this
+ * answers "can a browser learn anything about its own internet from this?" about
+ * a configured name, before any DNS exists. It leans on the same denylist for
+ * literals and adds the names DNS would otherwise have to resolve.
+ *
+ * Covers more than loopback, because the denylist does: private ranges, link-local,
+ * and the documentation ranges too. None of them describe a round trip across the
+ * internet, which is the only thing a control endpoint is for.
+ *
+ * Used to refuse an unusable `CONTROL_URL` at boot. The browser makes the same
+ * judgement again at measurement time — see `isLocalHost` in the web app — and
+ * that duplication is intentional: this one catches a misconfiguration, that one
+ * catches a control endpoint reached through a local proxy, which no amount of
+ * reading the configured string can see.
+ */
+export function isUnreachableControlHost(hostname: string): boolean {
+  // URL.hostname brackets IPv6 literals; isIP() does not recognise them.
+  const bare = hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  if (bare.length === 0) return true;
+
+  if (bare === 'localhost' || bare.endsWith('.localhost')) return true;
+  // mDNS: resolvable on the local network only.
+  if (bare.endsWith('.local')) return true;
+
+  if (isIP(bare) !== 0) return describeBlockedAddress(bare) !== null;
+
+  return false;
+}
+
 export interface NormalizedTarget {
   normalizedUrl: string;
   host: string;

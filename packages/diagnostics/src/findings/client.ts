@@ -8,9 +8,10 @@ import {
   THRESHOLDS,
   classify,
   classifyInverted,
+  clientRttBand,
   controlIsLoopback,
 } from '../thresholds.js';
-import { finding, ms } from './helpers.js';
+import { finding, hostOf, ms } from './helpers.js';
 
 /**
  * Findings about the user's own connection.
@@ -28,22 +29,45 @@ export function detectClientFindings(client: ClientEvidence | null): Finding[] {
 
   const out: Finding[] = [];
 
+  /*
+   * Judged against whichever band matches the instrument.
+   *
+   * A paired instance is asked for a near-empty body it grants us permission to
+   * read; anything else is timed opaquely, whole response and all. Reporting the
+   * second against the first accused a fibre line of being slow, so the band, the
+   * wording and the confidence all follow `controlIsPaired`.
+   */
+  const opaque = client.controlIsPaired === false;
+  const against = client.controlOrigin === null ? null : hostOf(client.controlOrigin);
+  const band = clientRttBand(client);
+
   const rtt = client.control.median;
-  const rttBand = classify(rtt, THRESHOLDS.clientRttMs);
-  if (rtt !== null && (rttBand === 'degraded' || rttBand === 'bad')) {
+  const rttStatus = classify(rtt, band);
+  if (rtt !== null && (rttStatus === 'degraded' || rttStatus === 'bad')) {
     out.push(
       finding({
         code: 'client-high-latency',
-        severity: rttBand === 'bad' ? 'major' : 'minor',
+        severity: rttStatus === 'bad' ? 'major' : 'minor',
         owner: 'you',
+        /*
+         * An opaque measurement cannot separate the network from whatever the far
+         * end did before answering, and that endpoint is the operator's choice
+         * rather than the reader's. Enough to raise, not enough to be certain.
+         */
+        confidence: opaque ? 'medium' : 'high',
         title: 'Your connection is slow to respond',
-        plain: `A small request from your device to our test server took ${ms(rtt)} to come back. On a healthy connection this is usually under ${THRESHOLDS.clientRttMs.ok} ms.`,
+        plain: opaque
+          ? `A request from your device to ${against ?? 'the test endpoint'} took ${ms(rtt)} to come back. This times a whole request and reply, so it reads higher than the latency figure a speed test gives you — under ${String(band.ok)} ms is the healthy range here.`
+          : `A small request from your device to our test server took ${ms(rtt)} to come back. On a healthy connection this stays under ${String(band.ok)} ms.`,
         impact:
           'This delay applies to every website you visit, not just this one. It makes browsing feel sluggish even when sites themselves are fast.',
-        technical: `Median round-trip time to the control endpoint was ${ms(rtt)} over ${client.control.count} samples.`,
+        technical: opaque
+          ? `Median round trip to ${client.controlOrigin ?? 'the control endpoint'} was ${ms(rtt)} over ${String(client.control.count)} samples, timed with an opaque no-cors fetch. That settles on the complete response rather than after reading a known-empty body, so it includes request framing and any work the endpoint does before replying — neither of which can be separated out from here. Judged against ${String(band.ok)}/${String(band.degraded)} ms, not the ${String(THRESHOLDS.clientRttMs.ok)}/${String(THRESHOLDS.clientRttMs.degraded)} ms band used for a paired instance's /api/ping.`
+          : `Median round-trip time to the control endpoint was ${ms(rtt)} over ${String(client.control.count)} samples.`,
         evidence: [
           { label: 'Typical round trip', value: ms(rtt) },
           { label: 'Samples', value: String(client.control.count) },
+          ...(against === null ? [] : [{ label: 'Measured against', value: against }]),
         ],
         remediation: {
           summary: 'Check your local network before blaming anything else.',

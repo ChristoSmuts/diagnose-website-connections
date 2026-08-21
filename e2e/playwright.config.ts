@@ -126,6 +126,20 @@ export default defineConfig({
         // default rather than speeding tests up into a different code path.
         STABILITY_SAMPLES: '5',
         RATE_LIMIT_PER_MINUTE: '200',
+        /*
+         * Pinned empty, not left to chance.
+         *
+         * The server loads the repo-root `.env` wherever it starts from, and real
+         * environment variables win over that file — so these two override a
+         * developer's own settings rather than inheriting them. Both decide
+         * whether a client vantage can be measured at all, which decides how many
+         * tiles the report renders. Without pinning, the spec asserting the
+         * honest self-hosted behaviour passes on a clean CI checkout and fails on
+         * any machine with a CONTROL_URL configured — the worst kind of test,
+         * since it looks like the code broke.
+         */
+        CONTROL_URL: '',
+        REFERENCE_URLS: '',
       },
     },
   ],
